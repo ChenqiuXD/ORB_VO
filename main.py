@@ -24,10 +24,11 @@ class ORBDetector:
 
     def detect_features(self):
         """Detect features and calculate the descriptors"""
+        # P.S. the features and descriptors of frame A are calculated beforehand
         self.featureFrameB, self.featureDesB = self.orb.detectAndCompute(self.frameB, None)
 
     def match_features(self):
-        """Match the features using BrtueForce and sort them by similarity. Store the first 50 matches"""
+        """This method match the features using BrtueForce and sort them by similarity"""
         type_of_None = type(None)
         if type(self.featureDesA) != type_of_None and type(self.featureDesB) != type_of_None:
             matches = self.bfMatcher.match(self.featureDesA, self.featureDesB)
@@ -37,6 +38,7 @@ class ORBDetector:
             self.match = []
 
     def find_most_compatible_match(self, candidate):
+        """This method loop through candidate to find matche which has most compatible number"""
         best_matchIdx = -1
         best_matchVal = 0
         len_of_match = len(self.match)
@@ -49,7 +51,7 @@ class ORBDetector:
         return best_matchIdx
 
     def find_inlier(self):
-        """This function execute the A4 step of the journal"""
+        """This method execute the A4 step of the journal"""
         len_of_matches = len(self.match)
         # The last line of W stores the whole number of consistency of this match
         self.W = np.zeros((len_of_matches+1, len_of_matches))
@@ -82,7 +84,7 @@ class ORBDetector:
                 candidate = np.delete(candidate, np.where(candidate == best_matchIdx), axis=0)
 
     def set_frame(self, frame_next):
-        """This function is applied after each frame is processed intending for reduce the calculation cost
+        """This method is applied after each frame is processed intending for reduce the calculation cost
         Refer to the jounal : A2 step last paragraph"""
         self.featureDesA = self.featureDesB
         self.featureFrameA = self.featureFrameB
@@ -140,11 +142,14 @@ if __name__ == "__main__":
             orb_detector = ORBDetector(color_image)
             orb_detector.detect_features()
         else:
+            # Update a new frame by set_frame()
             orb_detector.set_frame(color_image)
             orb_detector.detect_features()
             orb_detector.match_features()
             if orb_detector.match.__len__() != 0:
                 orb_detector.find_inlier()
+
+        # 
 
         # Draw the features on the image for debugging
         # image = cv2.drawKeypoints(color_image, orb_detector.featureFrameB, color_image, color=(255, 0, 0))
@@ -161,9 +166,3 @@ if __name__ == "__main__":
             iterCount += 1
         orb_detector.best_matches = []
 
-
-        # Save the match image for debug
-        # if iterCount == 1:
-        #     cv2.imwrite("MatchImage1.png", image)
-        # if iterCount == 1000:
-        #     cv2.imwrite("MatchImage1000.png", image)
