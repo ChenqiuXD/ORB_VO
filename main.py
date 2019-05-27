@@ -7,6 +7,33 @@ FEATUREMAX = 200
 INLIER_DIST_THRE = 10
 
 
+class Optimizer:
+    def __init__(self, featureA, featureB, matches, scale, intrin):
+        self.featureA = featureA
+        self.featureB = featureB
+        self.matches = matches
+        self.listA = []
+        self.listB = []
+        self.scale = scale
+        self.intrin = intrin
+
+    def get_list(self):
+        """This method get the list A and B by rs.deproject function"""
+        for match in self.matches:
+            img_pixel = [self.featureA[match.queryIdx].pt[0], self.featureA[match.queryIdx].pt[1]]
+            pointA = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, self.scale)
+            pointA = [pointA[0], pointA[2], 1]
+            img_pixel = [self.featureB[match.trainIdx].pt[0], self.featureB[match.trainIdx].pt[1]]
+            pointB = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, self.scale)
+            pointB = [pointB[0], pointB[2], 1]
+            self.listA.append(pointA)
+            self.listB.append(pointB)
+
+    def optimize(self):
+        """PSO method"""
+        pass
+
+
 class ORBDetector:
     def __init__(self, frame):
         self.featureFrameA = []
@@ -28,7 +55,8 @@ class ORBDetector:
         self.featureFrameB, self.featureDesB = self.orb.detectAndCompute(self.frameB, None)
 
     def match_features(self):
-        """This method match the features using BrtueForce and sort them by similarity"""
+        """This method match the features using BrutalForce and sort them by similarity
+         and only take the strongest 50"""
         type_of_None = type(None)
         if type(self.featureDesA) != type_of_None and type(self.featureDesB) != type_of_None:
             matches = self.bfMatcher.match(self.featureDesA, self.featureDesB)
@@ -38,7 +66,7 @@ class ORBDetector:
             self.match = []
 
     def find_most_compatible_match(self, candidate):
-        """This method loop through candidate to find matche which has most compatible number"""
+        """This method loop through candidate to find matches which has most compatible number"""
         best_matchIdx = -1
         best_matchVal = 0
         len_of_match = len(self.match)
@@ -100,7 +128,7 @@ if __name__ == "__main__":
     profile = pipe.start(config)
 
     # Unused line, intending for access to the intrinsic parameter of the camera
-    # profile = pipe.get_active_profile()
+    profile = pipe.get_active_profile()
 
     # Getting the depth sensor's depth scale. Real dist / scale = depth_frame_dist
     depth_sensor = profile.get_device().first_depth_sensor()
@@ -149,8 +177,6 @@ if __name__ == "__main__":
             if orb_detector.match.__len__() != 0:
                 orb_detector.find_inlier()
 
-        # 
-
         # Draw the features on the image for debugging
         # image = cv2.drawKeypoints(color_image, orb_detector.featureFrameB, color_image, color=(255, 0, 0))
         if iterCount != 0:
@@ -160,6 +186,13 @@ if __name__ == "__main__":
             cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('RealSense', image)
             cv2.waitKey(10)
+
+        # Optimize to calculate the transition matrix
+        optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB, orb_detector.best_matches,
+                              depth_scale, depth_intrin)
+        if iterCount != 0:
+            optimizer.get_list()
+            optimizer.optimize()
 
         # Update the iterCount
         print(orb_detector.best_matches)
