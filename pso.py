@@ -11,9 +11,6 @@ class PSO(object):
         self.amount = len(pA)
         self.pA = pA
         self.pB = pB
-        self.matrix = np.array([[1,0,0],
-                                      [0,1,0],
-                                      [0,0,1]])
         self.w = 0.6  # 惯性权重
         self.c1 = self.c2 = 2
         self.population_size = population_size  # 粒子群数量
