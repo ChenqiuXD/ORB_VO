@@ -162,6 +162,8 @@ if __name__ == "__main__":
             cv2.waitKey(10)
 
         # Update the iterCount
+        print(orb_detector.best_matches)
+        print(orb_detector.featureFrameA)
         if iterCount <= 1000:
             iterCount += 1
         orb_detector.best_matches = []
