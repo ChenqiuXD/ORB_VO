@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import pyrealsense2 as rs
+from pso import PSO
 
 THRESHHOLD = 30
 FEATUREMAX = 200
@@ -31,7 +32,9 @@ class Optimizer:
 
     def optimize(self):
         """PSO method"""
-        pass
+        optimize = PSO(population_size=100,max_steps=10000,pA=self.listA,pB=self.listB)
+        optimize.evolve()
+
 
 
 class ORBDetector:
@@ -195,8 +198,8 @@ if __name__ == "__main__":
             optimizer.optimize()
 
         # Update the iterCount
-        print(orb_detector.best_matches)
-        print(orb_detector.featureFrameA)
+        # print(orb_detector.best_matches)
+        # print(orb_detector.featureFrameA)
         if iterCount <= 1000:
             iterCount += 1
         orb_detector.best_matches = []
