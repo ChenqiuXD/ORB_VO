@@ -1,37 +1,54 @@
 import numpy as np
 import cv2
 import pyrealsense2 as rs
+from scipy.optimize import least_squares
+from math import cos, sin
 
 THRESHHOLD = 30
 FEATUREMAX = 200
-INLIER_DIST_THRE = 10
+INLIER_DIST_THRE = 3
 
 
 class Optimizer:
-    def __init__(self, featureA, featureB, matches, scale, intrin):
+    def __init__(self, featureA, featureB, matches, scale, intrinsic):
         self.featureA = featureA
         self.featureB = featureB
         self.matches = matches
         self.listA = []
         self.listB = []
         self.scale = scale
-        self.intrin = intrin
+        self.intrin = intrinsic
+        self.res = [0, 0, 0]
 
     def get_list(self):
         """This method get the list A and B by rs.deproject function"""
         for match in self.matches:
-            img_pixel = [self.featureA[match.queryIdx].pt[0], self.featureA[match.queryIdx].pt[1]]
-            pointA = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, self.scale)
-            pointA = [pointA[0], pointA[2], 1]
-            img_pixel = [self.featureB[match.trainIdx].pt[0], self.featureB[match.trainIdx].pt[1]]
-            pointB = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, self.scale)
-            pointB = [pointB[0], pointB[2], 1]
-            self.listA.append(pointA)
-            self.listB.append(pointB)
+            img_pixel = [int(self.featureA[match.queryIdx].pt[0]), int(self.featureA[match.queryIdx].pt[1])]
+            depth = aligned_depth_frame.get_distance(img_pixel[0], img_pixel[1])
+            point_a = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
+            point_a = [point_a[0], point_a[2], 1]
+            img_pixel = [int(self.featureB[match.trainIdx].pt[0]), int(self.featureB[match.trainIdx].pt[1])]
+            depth = aligned_depth_frame.get_distance(img_pixel[0], img_pixel[1])
+            point_b = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
+            point_b = [point_b[0], point_b[2], 1]
+            self.listA.append(point_a)
+            self.listB.append(point_b)
+
+    def func(self, x):
+        """Cost function used for optimization. Variables are defined as follows:
+        x = [delta_x, delta_y, delta_theta]
+        self.listA = [x, y, 1]
+        self.listB = [x, y, 1]"""
+        result = []
+        for i in np.arange(self.listA.__len__()):
+            result.append(self.listB[i][0] - (cos(x[2])*self.listA[0] + sin(x[2])*self.listA[1] + x[0]))
+            result.append(self.listB[i][1] - (sin(x[2])*self.listA[0] + sin(x[2])*self.listA[1] + x[1]))
+        return np.asarray(result)
 
     def optimize(self):
-        """PSO method"""
-        pass
+        """LM method by scipy"""
+        x0 = [0, 0, 0]
+        self.res = least_squares(self.func, x0, method='lm')
 
 
 class ORBDetector:
