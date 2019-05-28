@@ -1,7 +1,8 @@
 import numpy as np
 import cv2
-import pyrealsense2 as rs
-from main import Optimizer, ORBDetector
+from ORB_VO.main import Optimizer, ORBDetector
+
+IS_CAMERA_CONNECTED = False
 
 if __name__ == "__main__":
     pic1 = cv2.imread("pic1.jpg")
@@ -23,4 +24,13 @@ if __name__ == "__main__":
     # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
     # cv2.imshow('RealSense', image)
     # cv2.waitKey(0)
+
+    # The acquirement of depth_scale and depth_intrin is by debugging main.py
+    depth_intrin = [1, 1, 1]
+
+    # Create a optimizer and find the displacement
+    optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB
+                          , orb_detector.best_matches, depth_intrin)
+    optimizer.get_list()
+    optimizer.optimize()
 

@@ -10,13 +10,12 @@ INLIER_DIST_THRE = 3
 
 
 class Optimizer:
-    def __init__(self, featureA, featureB, matches, scale, intrinsic):
+    def __init__(self, featureA, featureB, matches, intrinsic):
         self.featureA = featureA
         self.featureB = featureB
         self.matches = matches
         self.listA = []
         self.listB = []
-        self.scale = scale
         self.intrin = intrinsic
         self.res = [0, 0, 0]
 
@@ -144,9 +143,6 @@ if __name__ == "__main__":
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
     profile = pipe.start(config)
 
-    # Unused line, intending for access to the intrinsic parameter of the camera
-    profile = pipe.get_active_profile()
-
     # Getting the depth sensor's depth scale. Real dist / scale = depth_frame_dist
     depth_sensor = profile.get_device().first_depth_sensor()
     depth_scale = depth_sensor.get_depth_scale()
@@ -205,8 +201,8 @@ if __name__ == "__main__":
             cv2.waitKey(10)
 
         # Optimize to calculate the transition matrix
-        optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB, orb_detector.best_matches,
-                              depth_scale, depth_intrin)
+        optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB
+                              , orb_detector.best_matches, depth_intrin)
         if iterCount != 0:
             optimizer.get_list()
             optimizer.optimize()
