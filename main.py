@@ -40,8 +40,8 @@ class Optimizer:
         self.listB = [x, y, 1]"""
         result = []
         for j in np.arange(self.listA.__len__()):
-            result.append(self.listB[j][0] - (cos(x[2])*self.listA[j][0] + sin(x[2])*self.listA[j][1] + x[0]))
-            result.append(self.listB[j][1] - (sin(x[2])*self.listA[j][0] + sin(x[2])*self.listA[j][1] + x[1]))
+            result.append(self.listB[j][0] - (cos(x[2])*self.listA[j][0] - sin(x[2])*self.listA[j][1] + x[0]))
+            result.append(self.listB[j][1] - (sin(x[2])*self.listA[j][0] + cos(x[2])*self.listA[j][1] + x[1]))
         return np.asarray(result)
 
     def optimize(self):
