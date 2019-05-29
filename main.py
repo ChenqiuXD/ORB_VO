@@ -9,13 +9,12 @@ INLIER_DIST_THRE = 10
 
 
 class Optimizer:
-    def __init__(self, featureA, featureB, matches, scale, intrin):
+    def __init__(self, featureA, featureB, matches, intrin):
         self.featureA = featureA
         self.featureB = featureB
         self.matches = matches
         self.listA = []
         self.listB = []
-        self.scale = scale
         self.intrin = intrin
 
     def get_list(self):
