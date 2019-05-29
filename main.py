@@ -39,9 +39,9 @@ class Optimizer:
         self.listA = [x, y, 1]
         self.listB = [x, y, 1]"""
         result = []
-        for i in np.arange(self.listA.__len__()):
-            result.append(self.listB[i][0] - (cos(x[2])*self.listA[0] + sin(x[2])*self.listA[1] + x[0]))
-            result.append(self.listB[i][1] - (sin(x[2])*self.listA[0] + sin(x[2])*self.listA[1] + x[1]))
+        for j in np.arange(self.listA.__len__()):
+            result.append(self.listB[j][0] - (cos(x[2])*self.listA[j][0] + sin(x[2])*self.listA[j][1] + x[0]))
+            result.append(self.listB[j][1] - (sin(x[2])*self.listA[j][0] + sin(x[2])*self.listA[j][1] + x[1]))
         return np.asarray(result)
 
     def optimize(self):
@@ -155,6 +155,9 @@ if __name__ == "__main__":
     for i in np.arange(5):
         frames = pipe.wait_for_frames()
 
+    # Open a file record.txt for the recording of result
+    f = open("record.txt", "w")
+
     iterCount = 0
     while True:
         # Wait for a coherent pair of frames: depth and color
@@ -205,10 +208,13 @@ if __name__ == "__main__":
                               , orb_detector.best_matches, depth_intrin)
         if iterCount != 0:
             optimizer.get_list()
-            optimizer.optimize()
+            if optimizer.listA.__len__() >= 3:
+                optimizer.optimize()
+                if iterCount <= 100:
+                    f.write("Hello")
+                    f.write("\n")
 
         # Update the iterCount
         if iterCount <= 1000:
             iterCount += 1
         orb_detector.best_matches = []
-
