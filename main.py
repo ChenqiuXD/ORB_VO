@@ -195,10 +195,14 @@ if __name__ == "__main__":
 
         # Optimize to calculate the transition matrix
         optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB, orb_detector.best_matches,
-                              depth_scale, depth_intrin)
+                              depth_intrin)
         if iterCount != 0:
             optimizer.get_list()
             optimizer.optimize()
+
+        # For the test of depth convert
+        depth = aligned_depth_frame.get_distance(240, 320)
+        result = depth_image[240, 320]
 
         
 
