@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import pyrealsense2 as rs
-from pso import PSO
+from ORB_VO.pso import PSO
 
 
 THRESHHOLD = 30

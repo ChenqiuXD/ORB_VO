@@ -91,6 +91,6 @@ class PSO(object):
         return self.pg
 
 
-pso = PSO(10, 100,np.array([[1,8,1],[8,4,1],[6,7,1],[5,2,1]]),np.array([[3,2,1],[1,6,1],[10,4,1],[4,3,1]]))
-pso.evolve()
+# pso = PSO(10, 100,np.array([[1,8,1],[8,4,1],[6,7,1],[5,2,1]]),np.array([[3,2,1],[1,6,1],[10,4,1],[4,3,1]]))
+# pso.evolve()
 # plt.show()

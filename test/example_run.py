@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
-from  main import Optimizer, ORBDetector
+import os
+from  ORB_VO.main import Optimizer, ORBDetector
 
 IS_CAMERA_CONNECTED = False
 
@@ -32,55 +33,71 @@ class Intrinsic:
 
 
 if __name__ == "__main__":
-    pic1 = cv2.imread("pic4.jpg")
-    pic1 = cv2.resize(pic1, (640, 480))
-    pic2 = cv2.imread("pic3.jpg")
-    pic2 = cv2.resize(pic2, (640, 480))
+    i = 0
+    for pic_name in os.listdir('../data/rgb'):
+        if i ==0:
+            first_pic = cv2.imread('../data/rgb/' + pic_name)
+            first_pic = cv2.resize(first_pic, (640, 480))
+            i += 1
+            continue
+        if i>100:
+            break
+        second_pic = cv2.imread('../data/rgb/'+pic_name)
+        second_pic = cv2.resize(second_pic,(640,480))
+        """some code here"""
+        orb_detector = ORBDetector(first_pic)
+        orb_detector.detect_features()
+        orb_detector.set_frame(second_pic)
+        orb_detector.detect_features()
+        orb_detector.match_features()
+        if orb_detector.match.__len__() != 0:
+            orb_detector.find_inlier()
+            # image = cv2.drawMatches(orb_detector.frameA, orb_detector.featureFrameA,
+            #                         orb_detector.frameB, orb_detector.featureFrameB,
+            #                         orb_detector.best_matches, orb_detector.frameA)
+            # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
+            # cv2.imshow('RealSense', image)
+            # cv2.waitKey(0)
 
-    orb_detector = ORBDetector(pic1)
-    orb_detector.detect_features()
-    orb_detector.set_frame(pic2)
-    orb_detector.detect_features()
-    orb_detector.match_features()
-    if orb_detector.match.__len__() != 0:
-        orb_detector.find_inlier()
+            # The acquirement of depth_scale and depth_intrin is by debugging main.py
+            depth_intrin = Intrinsic()
 
-    # image = cv2.drawMatches(orb_detector.frameA, orb_detector.featureFrameA,
-    #                         orb_detector.frameB, orb_detector.featureFrameB,
-    #                         orb_detector.best_matches, orb_detector.frameA)
-    # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
-    # cv2.imshow('RealSense', image)
-    # cv2.waitKey(0)
+            # Create a optimizer and find the displacement
+            optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB
+                                  , orb_detector.best_matches, depth_intrin)
 
-    # The acquirement of depth_scale and depth_intrin is by debugging main.py
-    depth_intrin = Intrinsic()
+            for match in optimizer.matches:
+                img_pixel = [int(optimizer.featureA[match.queryIdx].pt[0]),
+                             int(optimizer.featureA[match.queryIdx].pt[1])]
+                depth = 0.20
+                point_a = [0, 0, 0]
+                project_pixel_to_point(point_a, optimizer.intrin, img_pixel, depth)
+                point_a = [point_a[0], point_a[2], 1]
+                img_pixel = [int(optimizer.featureB[match.trainIdx].pt[0]),
+                             int(optimizer.featureB[match.trainIdx].pt[1])]
+                depth = 0.20
+                point_b = [0, 0, 0]
+                project_pixel_to_point(point_b, optimizer.intrin, img_pixel, depth)
+                point_b = [point_b[0], point_b[2], 1]
+                optimizer.listA.append(point_a)
+                optimizer.listB.append(point_b)
+            optimizer.optimize()
+            print(optimizer.optimzed_result)
 
-    # Create a optimizer and find the displacement
-    optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB
-                          , orb_detector.best_matches, depth_intrin)
+            # An extension which dump all the data of listA and listB for debugging. USELESS during the optimization
+            # file_a = open("listA.txt", "w")
+            # formatted = [[change_format(v) for v in r] for r in optimizer.listA]
+            # file_a.write(str(formatted))
+            # file_a.close()
+            # file_b = open("listB.txt", "w")
+            # formatted = [[change_format(v) for v in r] for r in optimizer.listB]
+            # file_b.write(str(formatted))
+            # file_b.close()
 
-    for match in optimizer.matches:
-        img_pixel = [int(optimizer.featureA[match.queryIdx].pt[0]), int(optimizer.featureA[match.queryIdx].pt[1])]
-        depth = 0.20
-        point_a = [0, 0, 0]
-        project_pixel_to_point(point_a, optimizer.intrin, img_pixel, depth)
-        point_a = [point_a[0], point_a[2], 1]
-        img_pixel = [int(optimizer.featureB[match.trainIdx].pt[0]), int(optimizer.featureB[match.trainIdx].pt[1])]
-        depth = 0.20
-        point_b = [0, 0, 0]
-        project_pixel_to_point(point_b, optimizer.intrin, img_pixel, depth)
-        point_b = [point_b[0], point_b[2], 1]
-        optimizer.listA.append(point_a)
-        optimizer.listB.append(point_b)
-    optimizer.optimize()
-    print(optimizer.optimzed_result)
+        """"""
+        first_pic = second_pic
+        i += 1
 
-    # An extension which dump all the data of listA and listB for debugging. USELESS during the optimization
-    # file_a = open("listA.txt", "w")
-    # formatted = [[change_format(v) for v in r] for r in optimizer.listA]
-    # file_a.write(str(formatted))
-    # file_a.close()
-    # file_b = open("listB.txt", "w")
-    # formatted = [[change_format(v) for v in r] for r in optimizer.listB]
-    # file_b.write(str(formatted))
-    # file_b.close()
+
+
+
