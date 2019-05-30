@@ -13,4 +13,4 @@ with open('data/ground_truth.txt', 'r') as file_to_read:
         """some code here"""
         first_pic = second_pic
         i += 1
-        # print([pic_num, var1,var2,var3])
+        print([pic_num, var1,var2,var3])
