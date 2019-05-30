@@ -21,14 +21,16 @@ class Optimizer:
     def get_list(self):
         """This method get the list A and B by rs.deproject function"""
         for match in self.matches:
-            img_pixel = [self.featureA[match.queryIdx].pt[0], self.featureA[match.queryIdx].pt[1]]
-            pointA = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, self.scale)
-            pointA = [pointA[0], pointA[2], 1]
-            img_pixel = [self.featureB[match.trainIdx].pt[0], self.featureB[match.trainIdx].pt[1]]
-            pointB = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, self.scale)
-            pointB = [pointB[0], pointB[2], 1]
-            self.listA.append(pointA)
-            self.listB.append(pointB)
+            img_pixel = [int(self.featureA[match.queryIdx].pt[0]), int(self.featureA[match.queryIdx].pt[1])]
+            depth = aligned_depth_frame.get_distance(img_pixel[0], img_pixel[1])
+            point_a = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
+            point_a = [point_a[0], point_a[2], 1]
+            img_pixel = [int(self.featureB[match.trainIdx].pt[0]), int(self.featureB[match.trainIdx].pt[1])]
+            depth = aligned_depth_frame.get_distance(img_pixel[0], img_pixel[1])
+            point_b = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
+            point_b = [point_b[0], point_b[2], 1]
+            self.listA.append(point_a)
+            self.listB.append(point_b)
 
     def optimize(self):
         """PSO method"""
