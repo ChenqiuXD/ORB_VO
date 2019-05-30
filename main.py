@@ -4,53 +4,64 @@ import numpy as np
 import cv2
 import pyrealsense2 as rs
 from pso import PSO
-
+from scipy.optimize import least_squares
+from math import cos, sin
 
 THRESHHOLD = 30
 FEATUREMAX = 200
-INLIER_DIST_THRE = 10
+INLIER_DIST_THRE = 3
 
 
 class Optimizer:
-    def __init__(self, featureA, featureB, matches, intrin):
+    def __init__(self, featureA, featureB, matches, intrinsic):
         self.featureA = featureA
         self.featureB = featureB
         self.matches = matches
         self.listA = []
         self.listB = []
-        self.intrin = intrin
         # Added by RK
         self.optimized_result = None
         self.pp = np.array([197.176, 162.371, 0])  # The initial position and posture of the
         # cam, with original theta being zero
+        self.intrin = intrinsic
+        self.res = [0, 0, 0]
 
     def get_list(self):
         """This method get the list A and B by rs.deproject function"""
         for match in self.matches:
-            img_pixel = [int(self.featureA[match.queryIdx].pt[0]), int(self.featureA[
-                                                                           match.queryIdx].pt[1])]
+            img_pixel = [int(self.featureA[match.queryIdx].pt[0]), int(self.featureA[match.queryIdx].pt[1])]
             depth = aligned_depth_frame.get_distance(img_pixel[0], img_pixel[1])
             point_a = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
             point_a = [point_a[0], point_a[2], 1]
-            img_pixel = [int(self.featureB[match.trainIdx].pt[0]), int(self.featureB[
-                                                                           match.trainIdx].pt[1])]
+            img_pixel = [int(self.featureB[match.trainIdx].pt[0]), int(self.featureB[match.trainIdx].pt[1])]
             depth = aligned_depth_frame.get_distance(img_pixel[0], img_pixel[1])
             point_b = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
             point_b = [point_b[0], point_b[2], 1]
             self.listA.append(point_a)
             self.listB.append(point_b)
 
-    def optimize(self):
-        """PSO method"""
-        self.optimized_result = PSO(population_size=100,max_steps=10000,pA=self.listA,
-                                    pB=self.listB).evolve()
-
     def get_new_pp(self):
-        cam_displace = self.optimized_result[[1, 2, 0]]
-        self.pp[2] += cam_displace[2]
+        # cam_displace = self.optimized_result[[1, 2, 0]]
+        self.pp[2] += self.res.x[2]
         tm = np.array([[np.cos(self.pp[2]), -np.sin(self.pp[2])],
                       [np.sin(self.pp[2]), np.cos(self.pp[2])]])
-        self.pp[:2] = tm.dot(cam_displace[:2])
+        self.pp[:2] = tm.dot(self.res.x[:2])
+
+    def func(self, x):
+        """Cost function used for optimization. Variables are defined as follows:
+        x = [delta_x, delta_y, delta_theta]
+        self.listA = [x, y, 1]
+        self.listB = [x, y, 1]"""
+        result = []
+        for j in np.arange(self.listA.__len__()):
+            result.append(self.listB[j][0] - (cos(x[2])*self.listA[j][0] - sin(x[2])*self.listA[j][1] + x[0]))
+            result.append(self.listB[j][1] - (sin(x[2])*self.listA[j][0] + cos(x[2])*self.listA[j][1] + x[1]))
+        return np.asarray(result)
+
+    def optimize(self):
+        """LM method by scipy"""
+        x0 = [0, 0, 0]
+        self.res = least_squares(self.func, x0, method='lm')
 
 
 class ORBDetector:
@@ -146,9 +157,6 @@ if __name__ == "__main__":
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
     profile = pipe.start(config)
 
-    # Unused line, intending for access to the intrinsic parameter of the camera
-    profile = pipe.get_active_profile()
-
     # Getting the depth sensor's depth scale. Real dist / scale = depth_frame_dist
     depth_sensor = profile.get_device().first_depth_sensor()
     depth_scale = depth_sensor.get_depth_scale()
@@ -161,8 +169,11 @@ if __name__ == "__main__":
     for i in np.arange(5):
         frames = pipe.wait_for_frames()
 
+    # Open a file record.txt for the recording of result
+    f = open("record.txt", "w")
+
     iterCount = 0
-    while True:
+    while iterCount <= 100:
         # Wait for a coherent pair of frames: depth and color
         frames = pipe.wait_for_frames()
 
@@ -207,16 +218,17 @@ if __name__ == "__main__":
             cv2.waitKey(10)
 
         # Optimize to calculate the transition matrix
-        optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB, orb_detector.best_matches,
-                              depth_scale, depth_intrin)
+        optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB
+                              , orb_detector.best_matches, depth_intrin)
         if iterCount != 0:
             optimizer.get_list()
-            optimizer.optimize()
+            if optimizer.listA.__len__() >= 3:
+                optimizer.optimize()
+                result = str(optimizer.res.x)
+                f.write(result)
+                f.write("\n")
 
         # Update the iterCount
-        # print(orb_detector.best_matches)
-        # print(orb_detector.featureFrameA)
-        if iterCount <= 1000:
+        if iterCount <= 10000:
             iterCount += 1
         orb_detector.best_matches = []
-

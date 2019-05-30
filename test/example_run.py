@@ -1,13 +1,15 @@
 import numpy as np
 import cv2
 import os
-from  ORB_VO.main import Optimizer, ORBDetector
+from main import Optimizer, ORBDetector
 
 IS_CAMERA_CONNECTED = False
+MAX_LENGTH = 5
+MAX_ITER = 100
 
 
 def change_format(value):
-    return ".%3f" %value
+    return ".%3f" % value
 
 
 def project_pixel_to_point(w, intrin, pixel, depth):
@@ -34,16 +36,19 @@ class Intrinsic:
 
 if __name__ == "__main__":
     i = 0
+    result = open("result.txt", "w")
     for pic_name in os.listdir('../data/rgb'):
-        if i ==0:
+        if i == 0:
             first_pic = cv2.imread('../data/rgb/' + pic_name)
             first_pic = cv2.resize(first_pic, (640, 480))
             i += 1
             continue
-        if i>100:
+        if i > MAX_ITER:
             break
         second_pic = cv2.imread('../data/rgb/'+pic_name)
-        second_pic = cv2.resize(second_pic,(640,480))
+        second_pic = cv2.resize(second_pic, (640, 480))
+        depth_pic = cv2.imread('../data/depth/'+pic_name)
+        depth_pic = cv2.resize(depth_pic, (640, 480))
         """some code here"""
         orb_detector = ORBDetector(first_pic)
         orb_detector.detect_features()
@@ -69,20 +74,22 @@ if __name__ == "__main__":
             for match in optimizer.matches:
                 img_pixel = [int(optimizer.featureA[match.queryIdx].pt[0]),
                              int(optimizer.featureA[match.queryIdx].pt[1])]
-                depth = 0.20
+                depth = depth_pic[img_pixel[1], img_pixel[0]] / 255.0 * MAX_LENGTH
+                depth = depth[0]
                 point_a = [0, 0, 0]
                 project_pixel_to_point(point_a, optimizer.intrin, img_pixel, depth)
                 point_a = [point_a[0], point_a[2], 1]
                 img_pixel = [int(optimizer.featureB[match.trainIdx].pt[0]),
                              int(optimizer.featureB[match.trainIdx].pt[1])]
-                depth = 0.20
+                depth = depth_pic[img_pixel[1], img_pixel[0]] / 255.0 * MAX_LENGTH
+                depth = depth[0]
                 point_b = [0, 0, 0]
                 project_pixel_to_point(point_b, optimizer.intrin, img_pixel, depth)
                 point_b = [point_b[0], point_b[2], 1]
                 optimizer.listA.append(point_a)
                 optimizer.listB.append(point_b)
             optimizer.optimize()
-            print(optimizer.optimzed_result)
+            # print(optimizer.res.x)
 
             # An extension which dump all the data of listA and listB for debugging. USELESS during the optimization
             # file_a = open("listA.txt", "w")
@@ -93,6 +100,12 @@ if __name__ == "__main__":
             # formatted = [[change_format(v) for v in r] for r in optimizer.listB]
             # file_b.write(str(formatted))
             # file_b.close()
+
+            # Calculate the position
+            pp = optimizer.pp
+            # Write the position into the file
+            content = pic_name + ' ' + str(pp) + '\n'
+            result.write(content)
 
         """"""
         first_pic = second_pic
