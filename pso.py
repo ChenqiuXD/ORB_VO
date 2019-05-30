@@ -1,12 +1,16 @@
+# -*- coding: utf-8 -*-
+
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 v_theta = 0.5*np.pi
 range_x=[-1,1]
 v_x = 1
 range_y=[-1,1]
 v_y = 1
+
+
 class PSO(object):
-    def __init__(self, population_size, max_steps,pA,pB):
+    def __init__(self, population_size, max_steps, pA, pB):
         # firtst is theta, second is x, the third is y
         self.amount = len(pA)
         self.pA = pA
@@ -17,27 +21,35 @@ class PSO(object):
         self.dim = 3  # 搜索空间的维度
         self.max_steps = max_steps  # 迭代次数
         self.x_bound = [[0, 2*np.pi],range_x,range_y]  # 解空间范围
-        self.x =np.array([[ np.random.uniform(self.x_bound[i][0], self.x_bound[i][1]) for i in range(3) ] for _ in range(self.population_size)])  # 初始化粒子群位置
-        self.v = np.array([[ np.random.uniform(self.x_bound[i][0], self.x_bound[i][1]) for i in range(3) ] for _ in range(self.population_size)]) # 初始化粒子群速度
+        self.x = np.array([[np.random.uniform(self.x_bound[i][0], self.x_bound[i][1]) for i in
+                             range(3)] for _ in range(self.population_size)])  # 初始化粒子群位置
+        self.v = np.array([[np.random.uniform(self.x_bound[i][0], self.x_bound[i][1]) for i in
+                            range(3)] for _ in range(self.population_size)])  # 初始化粒子群速度
         fitness = self.calculate_fitness()
         self.p = self.x  # 个体的最佳位置
         self.pg = self.x[np.argmin(fitness)]  # 全局最佳位置
         self.individual_best_fitness = fitness  # 个体的最优适应度
         self.global_best_fitness = np.max(fitness)  # 全局最佳适应度
 
-    def loss_function(self,matrix):
-        self.calculate_matrix()
-    def calculate_matrix(self,x):
-        return  np.array([[np.cos(x[0]),-np.sin(x[0]),x[1]],
-                                      [np.sin(x[0]),np.cos(x[0]),x[2]],
-                                      [0,0,1]])
+    # def loss_function(self, matrix):
+    #     self.calculate_matrix()
+
+    def calculate_matrix(self, x):
+        """
+        Rotation matrix.
+        :param x: [d_theta, d_x, dy].
+        :return: np.array([rotation matrix])
+        """
+        return np.array([[np.cos(x[0]), -np.sin(x[0]), x[1]], [np.sin(x[0]), np.cos(x[0]), x[2]],
+                         [0, 0, 1]])
+
     def calculate_fitness(self):
         result = []
         for k in range(self.population_size):
             tem = 0
             matrix = self.calculate_matrix(self.x[k])  # 根据粒子的三个属性值计算矩阵
             for i in range(self.amount):
-                error = self.pB[i] - matrix.dot(self.pA[i])#计算残差
+                error = self.pB[i] - matrix.dot(self.pA[i])  # 计算残差
                 tem += np.sum(np.square(error))
             result.append(tem)
         return np.array(result)
@@ -49,7 +61,8 @@ class PSO(object):
             r1 = np.random.rand(self.population_size, self.dim)
             r2 = np.random.rand(self.population_size, self.dim)
             # 更新速度和权重
-            self.v = self.w * self.v + self.c1 * r1 * (self.p - self.x) + self.c2 * r2 * (self.pg - self.x)
+            self.v = self.w * self.v + self.c1 * r1 * (self.p - self.x) + self.c2 * r2 * (self.pg
+                                                                                          - self.x)
             self.x = self.v + self.x
             for i in range(self.x.shape[0]):
                 if self.x[i][0]<=0:
@@ -85,12 +98,14 @@ class PSO(object):
                 self.global_best_fitness = np.min(fitness)
 
 
-            # print('best fitness: %.5f, mean fitness: %.5f' % (self.global_best_fitness, np.mean(fitness)))
-            if self.global_best_fitness<0.0001:
+            # print('best fitness: %.5f, mean fitness: %.5f' % (self.global_best_fitness,
+            # np.mean(fitness)))
+            if self.global_best_fitness < 0.0001:
                 break
         return self.pg
 
 
-# pso = PSO(10, 100,np.array([[1,8,1],[8,4,1],[6,7,1],[5,2,1]]),np.array([[3,2,1],[1,6,1],[10,4,1],[4,3,1]]))
+# pso = PSO(10, 100, np.array([[1, 8, 1],[8, 4, 1],[6, 7, 1],[5, 2, 1]]), np.array([[3, 2, 1],
+# [1, 6, 1], [10, 4, 1], [4,3,1]]))
 # pso.evolve()
 # plt.show()

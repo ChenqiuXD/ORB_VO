@@ -1,7 +1,9 @@
+# -*- coding: utf-8 -*-
+
 import numpy as np
 import cv2
 import pyrealsense2 as rs
-from ORB_VO.pso import PSO
+from pso import PSO
 
 
 THRESHHOLD = 30
@@ -17,15 +19,21 @@ class Optimizer:
         self.listA = []
         self.listB = []
         self.intrin = intrin
+        # Added by RK
+        self.optimized_result = None
+        self.pp = np.array([197.176, 162.371, 0])  # The initial position and posture of the
+        # cam, with original theta being zero
 
     def get_list(self):
         """This method get the list A and B by rs.deproject function"""
         for match in self.matches:
-            img_pixel = [int(self.featureA[match.queryIdx].pt[0]), int(self.featureA[match.queryIdx].pt[1])]
+            img_pixel = [int(self.featureA[match.queryIdx].pt[0]), int(self.featureA[
+                                                                           match.queryIdx].pt[1])]
             depth = aligned_depth_frame.get_distance(img_pixel[0], img_pixel[1])
             point_a = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
             point_a = [point_a[0], point_a[2], 1]
-            img_pixel = [int(self.featureB[match.trainIdx].pt[0]), int(self.featureB[match.trainIdx].pt[1])]
+            img_pixel = [int(self.featureB[match.trainIdx].pt[0]), int(self.featureB[
+                                                                           match.trainIdx].pt[1])]
             depth = aligned_depth_frame.get_distance(img_pixel[0], img_pixel[1])
             point_b = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
             point_b = [point_b[0], point_b[2], 1]
@@ -34,10 +42,15 @@ class Optimizer:
 
     def optimize(self):
         """PSO method"""
-        self.optimize = PSO(population_size=100,max_steps=10000,pA=self.listA,pB=self.listB)
-        self.optimzed_result = self.optimize.evolve()
+        self.optimized_result = PSO(population_size=100,max_steps=10000,pA=self.listA,
+                                    pB=self.listB).evolve()
 
-
+    def get_new_pp(self):
+        cam_displace = self.optimized_result[[1, 2, 0]]
+        self.pp[2] += cam_displace[2]
+        tm = np.array([[np.cos(self.pp[2]), -np.sin(self.pp[2])],
+                      [np.sin(self.pp[2]), np.cos(self.pp[2])]])
+        self.pp[:2] = tm.dot(cam_displace[:2])
 
 
 class ORBDetector:
