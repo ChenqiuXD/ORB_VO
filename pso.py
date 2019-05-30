@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 v_theta = 0.5*np.pi
-range_x=[-10,10]
+range_x=[-1,1]
 v_x = 1
-range_y=[-10,10]
+range_y=[-1,1]
 v_y = 1
 class PSO(object):
     def __init__(self, population_size, max_steps,pA,pB):
@@ -45,17 +45,35 @@ class PSO(object):
     def evolve(self):
         # fig = plt.figure()
         for step in range(self.max_steps):
+
             r1 = np.random.rand(self.population_size, self.dim)
             r2 = np.random.rand(self.population_size, self.dim)
             # 更新速度和权重
             self.v = self.w * self.v + self.c1 * r1 * (self.p - self.x) + self.c2 * r2 * (self.pg - self.x)
             self.x = self.v + self.x
+            for i in range(self.x.shape[0]):
+                if self.x[i][0]<=0:
+                    self.x[i][0]=0
+                elif self.x[i][0]>2*np.pi:
+                    self.x[i][0] = 2*np.pi
+                if self.x[i][1]<=range_x[0]:
+                    self.x[i][0]=range_x[0]
+                elif self.x[i][1]>range_x[1]:
+                    self.x[i][0] = range_x[1]
+                if self.x[i][2]<=range_y[0]:
+                    self.x[i][2]=range_y[0]
+                elif self.x[i][2]>range_y[1]:
+                    self.x[i][2] = range_y[1]
+
+
+
             # plt.clf()
             # plt.scatter(self.x[:, 0], self.x[:, 1], s=30, color='k')
             # plt.xlim(self.x_bound[0], self.x_bound[1])
             # plt.ylim(self.x_bound[0], self.x_bound[1])
             # plt.pause(0.01)
             fitness = self.calculate_fitness()
+
             # 需要更新的个体
             update_bool = np.greater(self.individual_best_fitness, fitness)
             update_id = np.argwhere(update_bool==True)
@@ -65,7 +83,12 @@ class PSO(object):
             if np.min(fitness) < self.global_best_fitness:
                 self.pg = self.x[np.argmin(fitness)]
                 self.global_best_fitness = np.min(fitness)
-            print('best fitness: %.5f, mean fitness: %.5f' % (self.global_best_fitness, np.mean(fitness)))
+
+
+            # print('best fitness: %.5f, mean fitness: %.5f' % (self.global_best_fitness, np.mean(fitness)))
+            if self.global_best_fitness<0.0001:
+                break
+        return self.pg
 
 
 pso = PSO(10, 100,np.array([[1,8,1],[8,4,1],[6,7,1],[5,2,1]]),np.array([[3,2,1],[1,6,1],[10,4,1],[4,3,1]]))

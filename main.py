@@ -3,6 +3,7 @@ import cv2
 import pyrealsense2 as rs
 from pso import PSO
 
+
 THRESHHOLD = 30
 FEATUREMAX = 200
 INLIER_DIST_THRE = 10
@@ -31,8 +32,9 @@ class Optimizer:
 
     def optimize(self):
         """PSO method"""
-        optimize = PSO(population_size=100,max_steps=10000,pA=self.listA,pB=self.listB)
-        optimize.evolve()
+        self.optimize = PSO(population_size=100,max_steps=10000,pA=self.listA,pB=self.listB)
+        self.optimzed_result = self.optimize.evolve()
+
 
 
 

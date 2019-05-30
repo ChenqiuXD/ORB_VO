@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-from main import Optimizer, ORBDetector
+from  main import Optimizer, ORBDetector
 
 IS_CAMERA_CONNECTED = False
 
@@ -32,9 +32,9 @@ class Intrinsic:
 
 
 if __name__ == "__main__":
-    pic1 = cv2.imread("pic1.jpg")
+    pic1 = cv2.imread("pic4.jpg")
     pic1 = cv2.resize(pic1, (640, 480))
-    pic2 = cv2.imread("pic2.jpg")
+    pic2 = cv2.imread("pic3.jpg")
     pic2 = cv2.resize(pic2, (640, 480))
 
     orb_detector = ORBDetector(pic1)
@@ -73,7 +73,7 @@ if __name__ == "__main__":
         optimizer.listA.append(point_a)
         optimizer.listB.append(point_b)
     optimizer.optimize()
-    print(optimizer.res.x)
+    print(optimizer.optimzed_result)
 
     # An extension which dump all the data of listA and listB for debugging. USELESS during the optimization
     # file_a = open("listA.txt", "w")
