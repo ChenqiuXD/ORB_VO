@@ -34,8 +34,8 @@ class Optimizer:
 
     def optimize(self):
         """PSO method"""
-        self.optimize = PSO(population_size=100,max_steps=10000,pA=self.listA,pB=self.listB)
-        self.optimzed_result = self.optimize.evolve()
+        pso_optimizer = PSO(population_size=50,max_steps=50,pA=self.listA,pB=self.listB)
+        self.optimzed_result = pso_optimizer.evolve()
 
 
 

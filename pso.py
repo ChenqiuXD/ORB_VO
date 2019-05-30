@@ -5,6 +5,7 @@ range_x=[-1,1]
 v_x = 1
 range_y=[-1,1]
 v_y = 1
+MAX_ITER = 50
 class PSO(object):
     def __init__(self, population_size, max_steps,pA,pB):
         # firtst is theta, second is x, the third is y
@@ -86,7 +87,7 @@ class PSO(object):
 
 
             # print('best fitness: %.5f, mean fitness: %.5f' % (self.global_best_fitness, np.mean(fitness)))
-            if self.global_best_fitness<0.0001:
+            if self.global_best_fitness<0.005:
                 break
         return self.pg
 
