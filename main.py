@@ -159,7 +159,7 @@ if __name__ == "__main__":
     f = open("record.txt", "w")
 
     iterCount = 0
-    while True:
+    while iterCount <= 100:
         # Wait for a coherent pair of frames: depth and color
         frames = pipe.wait_for_frames()
 
@@ -210,11 +210,11 @@ if __name__ == "__main__":
             optimizer.get_list()
             if optimizer.listA.__len__() >= 3:
                 optimizer.optimize()
-                if iterCount <= 100:
-                    f.write("Hello")
-                    f.write("\n")
+                result = str(optimizer.res.x)
+                f.write(result)
+                f.write("\n")
 
         # Update the iterCount
-        if iterCount <= 1000:
+        if iterCount <= 10000:
             iterCount += 1
         orb_detector.best_matches = []

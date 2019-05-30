@@ -1,8 +1,11 @@
 import numpy as np
 import cv2
+import os
 from ORB_VO.main import Optimizer, ORBDetector
 
 IS_CAMERA_CONNECTED = False
+MAX_LENGTH = 5
+MAX_ITER = 100
 
 
 def change_format(value):
@@ -22,7 +25,6 @@ def project_pixel_to_point(w, intrin, pixel, depth):
 
 class Intrinsic:
     def __init__(self):
-        """Intrinsic parameters copied from debugging main.py"""
         self.fx = 616.54541015625
         self.fy = 616.6361694335938
         self.height = 480
@@ -33,56 +35,82 @@ class Intrinsic:
 
 
 if __name__ == "__main__":
-    pic1 = cv2.imread("pic1.jpg")
-    pic1 = cv2.resize(pic1, (640, 480))
-    pic2 = cv2.imread("pic2.jpg")
-    pic2 = cv2.resize(pic2, (640, 480))
+    i = 0
+    result = open("result.txt", "w")
+    for pic_name in os.listdir('../data/rgb'):
+        if i == 0:
+            first_pic = cv2.imread('../data/rgb/' + pic_name)
+            first_pic = cv2.resize(first_pic, (640, 480))
+            i += 1
+            continue
+        if i > MAX_ITER:
+            break
+        second_pic = cv2.imread('../data/rgb/'+pic_name)
+        second_pic = cv2.resize(second_pic, (640, 480))
+        depth_pic = cv2.imread('../data/depth/'+pic_name)
+        depth_pic = cv2.resize(depth_pic, (640, 480))
+        """some code here"""
+        orb_detector = ORBDetector(first_pic)
+        orb_detector.detect_features()
+        orb_detector.set_frame(second_pic)
+        orb_detector.detect_features()
+        orb_detector.match_features()
+        if orb_detector.match.__len__() != 0:
+            orb_detector.find_inlier()
+            # image = cv2.drawMatches(orb_detector.frameA, orb_detector.featureFrameA,
+            #                         orb_detector.frameB, orb_detector.featureFrameB,
+            #                         orb_detector.best_matches, orb_detector.frameA)
+            # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
+            # cv2.imshow('RealSense', image)
+            # cv2.waitKey(0)
 
-    orb_detector = ORBDetector(pic1)
-    orb_detector.detect_features()
-    orb_detector.set_frame(pic2)
-    orb_detector.detect_features()
-    orb_detector.match_features()
-    if orb_detector.match.__len__() != 0:
-        orb_detector.find_inlier()
+            # The acquirement of depth_scale and depth_intrin is by debugging main.py
+            depth_intrin = Intrinsic()
 
-    # image = cv2.drawMatches(orb_detector.frameA, orb_detector.featureFrameA,
-    #                         orb_detector.frameB, orb_detector.featureFrameB,
-    #                         orb_detector.best_matches, orb_detector.frameA)
-    # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
-    # cv2.imshow('RealSense', image)
-    # cv2.waitKey(0)
+            # Create a optimizer and find the displacement
+            optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB
+                                  , orb_detector.best_matches, depth_intrin)
 
-    # The acquirement of depth_scale and depth_intrin is by debugging main.py
-    depth_intrin = Intrinsic()
+            for match in optimizer.matches:
+                img_pixel = [int(optimizer.featureA[match.queryIdx].pt[0]),
+                             int(optimizer.featureA[match.queryIdx].pt[1])]
+                depth = depth_pic[img_pixel[1], img_pixel[0]] / 255.0 * MAX_LENGTH
+                depth = depth[0]
+                point_a = [0, 0, 0]
+                project_pixel_to_point(point_a, optimizer.intrin, img_pixel, depth)
+                point_a = [point_a[0], point_a[2], 1]
+                img_pixel = [int(optimizer.featureB[match.trainIdx].pt[0]),
+                             int(optimizer.featureB[match.trainIdx].pt[1])]
+                depth = depth_pic[img_pixel[1], img_pixel[0]] / 255.0 * MAX_LENGTH
+                depth = depth[0]
+                point_b = [0, 0, 0]
+                project_pixel_to_point(point_b, optimizer.intrin, img_pixel, depth)
+                point_b = [point_b[0], point_b[2], 1]
+                optimizer.listA.append(point_a)
+                optimizer.listB.append(point_b)
+            optimizer.optimize()
+            # print(optimizer.res.x)
 
-    # Create a optimizer and find the displacement
-    optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB
-                          , orb_detector.best_matches, depth_intrin)
+            # An extension which dump all the data of listA and listB for debugging. USELESS during the optimization
+            # file_a = open("listA.txt", "w")
+            # formatted = [[change_format(v) for v in r] for r in optimizer.listA]
+            # file_a.write(str(formatted))
+            # file_a.close()
+            # file_b = open("listB.txt", "w")
+            # formatted = [[change_format(v) for v in r] for r in optimizer.listB]
+            # file_b.write(str(formatted))
+            # file_b.close()
 
-    # Calculate the world coordinate in optimizer
-    for match in optimizer.matches:
-        img_pixel = [int(optimizer.featureA[match.queryIdx].pt[0]), int(optimizer.featureA[match.queryIdx].pt[1])]
-        depth = 0.15
-        point_a = [0, 0, 0]
-        project_pixel_to_point(point_a, optimizer.intrin, img_pixel, depth)
-        point_a = [point_a[0], point_a[2], 1]
-        img_pixel = [int(optimizer.featureB[match.trainIdx].pt[0]), int(optimizer.featureB[match.trainIdx].pt[1])]
-        depth = 0.15
-        point_b = [0, 0, 0]
-        project_pixel_to_point(point_b, optimizer.intrin, img_pixel, depth)
-        point_b = [point_b[0], point_b[2], 1]
-        optimizer.listA.append(point_a)
-        optimizer.listB.append(point_b)
-    optimizer.optimize()
-    print(optimizer.res.x)
+            # Calculate the position
 
-    # An extension which dump all the data of listA and listB for debugging. USELESS during the optimization
-    # file_a = open("listA.txt", "w")
-    # formatted = [[change_format(v) for v in r] for r in optimizer.listA]
-    # file_a.write(str(formatted))
-    # file_a.close()
-    # file_b = open("listB.txt", "w")
-    # formatted = [[change_format(v) for v in r] for r in optimizer.listB]
-    # file_b.write(str(formatted))
-    # file_b.close()
+            # Write the position into the file
+            content = pic_name + ' ' + str(optimizer.res.x) + '\n'
+            result.write(content)
+
+        """"""
+        first_pic = second_pic
+        i += 1
+
+
+
+
