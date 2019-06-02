@@ -8,7 +8,7 @@ IS_CAMERA_CONNECTED = False
 MAX_LENGTH = 2
 MAX_ITER = 500
 USE_LM  = True
-GAP = 2
+GAP = 10
 
 
 def change_format(value):

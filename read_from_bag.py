@@ -8,8 +8,11 @@ from ORB_VO.pso import PSO
 from scipy.optimize import least_squares
 
 USE_LM =True
-BAG_NAME = '20190601_230135.bag'
-MAX_DIS = 2.5
+BAG_NAME = '20190602_095040.bag'
+MAX_DIS = 4
+MIN_DIS = 0.5
+GAP = 60
+PLOT_TREJACTORY = True
 
 
 class Optimizer:
@@ -34,13 +37,15 @@ class Optimizer:
         for match in self.matches:
             img_pixel = [int(self.featureA[match.queryIdx].pt[0]), int(self.featureA[match.queryIdx].pt[1])]
             depth = self.depth_frameA.get_distance(img_pixel[0], img_pixel[1])
-            if depth >=6 or depth<=0.1:
+            if depth >=MAX_DIS or depth<=MIN_DIS:
+                print(depth)
                 continue
             # print(depth)
             point_a = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
             point_a = [point_a[0], point_a[2], 1]
             img_pixel = [int(self.featureB[match.trainIdx].pt[0]), int(self.featureB[match.trainIdx].pt[1])]
-            if depth >=6 or depth<=0.1:
+            if depth >=MAX_DIS or depth<=MIN_DIS:
+                print(depth)
                 continue
             # print(depth)
             depth = self.depth_frameB.get_distance(img_pixel[0], img_pixel[1])
@@ -98,16 +103,16 @@ if __name__ == "__main__":
     align_to = rs.stream.color
     align = rs.align(align_to)
 
-    f = open('result_new.txt','w+')
+    # f = open('result_new.txt','w+')
     # Skip the first five frame for stable usage.
-    for i in np.arange(5):
+    for i in np.arange(20):
         frames = p.wait_for_frames()
-
+    f = open('result_new.txt', 'w')
     iterCount = 0
-    while True:
+    while iterCount<2000:
         # Wait for a coherent pair of frames: depth and color
         frames = p.wait_for_frames()
-        if iterCount%3 !=0:
+        if iterCount%GAP !=0:
             iterCount += 1
             continue
 
@@ -152,20 +157,32 @@ if __name__ == "__main__":
                                     orb_detector.best_matches, orb_detector.frameA)
             cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('RealSense', image)
-            cv2.waitKey(0)
+            cv2.waitKey(10)
 
             # Optimize to calculate the transition matrix
             optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB
                               , orb_detector.best_matches, depth_intrin,depth_frameA=first_depth_frame,depth_frameB=second_depth_frame)
         if iterCount != 0:
+
             optimizer.get_list()
             if len(optimizer.listA) >= 3:
                 optimizer.optimize()
                 optimizer.get_new_pp()
                 print(iterCount,optimizer.pp)
-                result = str(optimizer.res.x[0] )+ ' ' + str(optimizer.res.x[1])
+                if USE_LM:
+                    if not PLOT_TREJACTORY:
+                        result = str(optimizer.res.x[0] )+ ' ' + str(optimizer.res.x[1])
+                    else:
+                        result = str(optimizer.pp[0]) + ' ' + str(optimizer.pp[1])
+
+                else:
+                    if not PLOT_TREJACTORY:
+                        result = str(optimizer.optimized_result[1]) + ' ' + str(optimizer.optimized_result[2])
+                    else:
+                        result = str(optimizer.pp[0]) + ' ' + str(optimizer.pp[1])
                 f.write(result)
                 f.write("\n")
+
 
         # Update the iterCount
         if iterCount <= 10000:
@@ -177,4 +194,5 @@ if __name__ == "__main__":
         # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
         # cv2.imshow('RealSense', depth_image)
         # cv2.waitKey(10)
+    f.close()
     p.stop()
