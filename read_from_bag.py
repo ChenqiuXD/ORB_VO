@@ -4,15 +4,13 @@ import numpy as np
 from ORB_VO.main import ORBDetector
 from math import sin,cos
 from ORB_VO.pso import PSO
-
 from scipy.optimize import least_squares
 USE_LM =True
 BAG_NAME = '20190602_095040.bag'
 MAX_DIS = 4
 MIN_DIS = 0.5
-GAP = 1
+GAP = 20
 PLOT_TREJACTORY = True
-threeD_file = open('3D_file.txt','a')
 
 if __name__ == "__main__":
     p = rs.pipeline()

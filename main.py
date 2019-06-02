@@ -16,7 +16,7 @@ MAX_DIS = 4
 MIN_DIS = 0.5
 GAP = 60
 PLOT_TREJACTORY = True
-threeD_file = open('3D_file.txt','a')
+# threeD_file = open('3D_file.txt','a')
 
 
 class ORBDetector:
@@ -102,12 +102,26 @@ class ORBDetector:
                 # ASSUMPTION : the index of descriptor is the same with the index of image
                 wa = self.featureFrame_first[self.match[i].queryIdx].pt[0]-self.featureFrame_first[self.match[j].queryIdx].pt[0]
                 wb = self.featureFrame_first[self.match[i].queryIdx].pt[1]-self.featureFrame_first[self.match[j].queryIdx].pt[1]
+                img_pixel1 = [int(self.featureFrame_first[self.match[i].queryIdx].pt[0]),
+                             int(self.featureFrame_first[self.match[i].queryIdx].pt[1])]
+                img_pixel2 = [int(self.featureFrame_first[self.match[j].queryIdx].pt[0]),
+                             int(self.featureFrame_first[self.match[j].queryIdx].pt[1])]
+                depth1 = self.first_depth_frame.get_distance(img_pixel1[0], img_pixel1[1])
+                depth2 = self.first_depth_frame.get_distance(img_pixel2[0], img_pixel2[1])
+                wc = depth1 - depth2
                 wa_ = self.featureFrame_second[self.match[i].trainIdx].pt[0]-self.featureFrame_second[self.match[j].trainIdx].pt[0]
                 wb_ = self.featureFrame_second[self.match[i].trainIdx].pt[1]-self.featureFrame_second[self.match[j].trainIdx].pt[1]
+                img_pixel1_ = [int(self.featureFrame_second[self.match[i].trainIdx].pt[0]),
+                             int(self.featureFrame_second[self.match[i].trainIdx].pt[1])]
+                img_pixel2_ = [int(self.featureFrame_second[self.match[j].trainIdx].pt[0]),
+                             int(self.featureFrame_second[self.match[j].trainIdx].pt[1])]
+                depth1 = self.second_depth_frame.get_distance(img_pixel1_[0], img_pixel1_[1])
+                depth2 = self.second_depth_frame.get_distance(img_pixel2_[0], img_pixel2_[1])
+                wc_ = depth1 - depth2
                 #Todo: based on the three dimension imformation
 
                 # Compare and complete the matrix W
-                if abs(wa-wa_) + abs(wb-wb_) <= INLIER_DIST_THRE:
+                if abs(wa-wa_) + abs(wb-wb_) + abs(wc-wc_)<= INLIER_DIST_THRE:
                     self.W[i, j] = 1
                     self.W[j, i] = 1
                     self.W[len_of_matches, j] += 1
@@ -123,8 +137,6 @@ class ORBDetector:
                 self.best_matches.append(self.match[best_matchIdx])
                 candidate = np.delete(candidate, np.where(candidate == best_matchIdx), axis=0)
 
-
-    
     def calculate_camera_coordinates(self):
         """This method get the list A and B by rs.deproject function"""
         for match in self.best_matches:
@@ -135,8 +147,8 @@ class ORBDetector:
                 continue
             # print(depth)
             point_a = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel, depth)
-            threeD_file.write(str(point_a[1]))
-            threeD_file.write("\n")
+            # threeD_file.write(str(point_a[1]))
+            # threeD_file.write("\n")
             point_a = [point_a[0], point_a[2], 1]
             img_pixel = [int(self.featureFrame_second[match.trainIdx].pt[0]), int(self.featureFrame_second[match.trainIdx].pt[1])]
             if depth >=MAX_DIS or depth<=MIN_DIS:
@@ -145,8 +157,8 @@ class ORBDetector:
             # print(depth)
             depth = self.second_depth_frame.get_distance(img_pixel[0], img_pixel[1])
             point_b = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel, depth)
-            threeD_file.write(str(point_b[1]))
-            threeD_file.write("\n")
+            # threeD_file.write(str(point_b[1]))
+            # threeD_file.write("\n")
             point_b = [point_b[0], point_b[2], 1]
             self.camera_coordinate_first.append(point_a)
             self.camera_coordinate_second.append(point_b)
