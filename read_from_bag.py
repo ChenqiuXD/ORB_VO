@@ -6,88 +6,13 @@ from math import sin,cos
 from ORB_VO.pso import PSO
 
 from scipy.optimize import least_squares
-
 USE_LM =True
 BAG_NAME = '20190602_095040.bag'
 MAX_DIS = 4
 MIN_DIS = 0.5
-GAP = 60
+GAP = 1
 PLOT_TREJACTORY = True
-
-
-class Optimizer:
-    pp = np.array([0.0, 0.0, 0.0])  # The initial position and posture of the
-    def __init__(self, featureA, featureB, matches, intrinsic, depth_frameA,depth_frameB,use_lm = USE_LM):
-        self.USE_LM = use_lm
-        self.featureA = featureA
-        self.featureB = featureB
-        self.matches = matches
-        self.depth_frameA = depth_frameA
-        self.depth_frameB = depth_frameB
-        self.listA = []
-        self.listB = []
-        # Added by RK
-        self.optimized_result = None
-        # cam, with original theta being zero
-        self.intrin = intrinsic
-        self.res = [0, 0, 0]
-
-    def get_list(self):
-        """This method get the list A and B by rs.deproject function"""
-        for match in self.matches:
-            img_pixel = [int(self.featureA[match.queryIdx].pt[0]), int(self.featureA[match.queryIdx].pt[1])]
-            depth = self.depth_frameA.get_distance(img_pixel[0], img_pixel[1])
-            if depth >=MAX_DIS or depth<=MIN_DIS:
-                print(depth)
-                continue
-            # print(depth)
-            point_a = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
-            point_a = [point_a[0], point_a[2], 1]
-            img_pixel = [int(self.featureB[match.trainIdx].pt[0]), int(self.featureB[match.trainIdx].pt[1])]
-            if depth >=MAX_DIS or depth<=MIN_DIS:
-                print(depth)
-                continue
-            # print(depth)
-            depth = self.depth_frameB.get_distance(img_pixel[0], img_pixel[1])
-            point_b = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
-            point_b = [point_b[0], point_b[2], 1]
-            self.listA.append(point_a)
-            self.listB.append(point_b)
-
-    def get_new_pp(self):
-        # cam_displace = self.optimized_result[[1, 2, 0]]
-        if USE_LM:
-            Optimizer.pp[2] += self.res.x[2]
-            tm = np.array([[np.cos(Optimizer.pp[2]), -np.sin(Optimizer.pp[2])],
-                          [np.sin(Optimizer.pp[2]), np.cos(Optimizer.pp[2])]])
-            Optimizer.pp[:2] += tm.dot(self.res.x[:2])
-        else:
-            Optimizer.pp[2] += self.optimized_result[0]
-            tm = np.array([[np.cos(Optimizer.pp[2]), -np.sin(Optimizer.pp[2])],
-                           [np.sin(Optimizer.pp[2]), np.cos(Optimizer.pp[2])]])
-            Optimizer.pp[:2] += tm.dot(self.optimized_result[1:3])
-
-    def func(self, x):
-        """Cost function used for optimization. Variables are defined as follows:
-        x = [delta_x, delta_y, delta_theta]
-        self.listA = [x, y, 1]
-        self.listB = [x, y, 1]"""
-        result = []
-        for j in np.arange(self.listA.__len__()):
-            result.append(self.listB[j][0] - (cos(x[2])*self.listA[j][0] - sin(x[2])*self.listA[j][1] + x[0]))
-            result.append(self.listB[j][1] - (sin(x[2])*self.listA[j][0] + cos(x[2])*self.listA[j][1] + x[1]))
-        return np.asarray(result)
-
-    def optimize(self):
-        """LM method by scipy"""
-        if self.USE_LM:
-            x0 = [0, 0, 0]
-            self.res = least_squares(self.func, x0, method='lm')
-            self.res.x *= 100
-        else:
-            pso_optimizer = PSO( population_size=10, max_steps=50, pA=self.listA, pB=self.listB)
-            self.optimized_result = pso_optimizer.evolve()
-            self.optimized_result[1:3] = 100*self.optimized_result[1:3]
+threeD_file = open('3D_file.txt','a')
 
 if __name__ == "__main__":
     p = rs.pipeline()
@@ -115,17 +40,13 @@ if __name__ == "__main__":
         if iterCount%GAP !=0:
             iterCount += 1
             continue
-
-
+            
         # Align the depth frame and color frame
         aligned_frames = align.process(frames)
         second_depth_frame = aligned_frames.get_depth_frame()
         color_frame = aligned_frames.get_color_frame()
         if not second_depth_frame or not color_frame:
-            iterCount += 1
             continue
-
-
 
         # Intrinsics & Extrinsics
         depth_intrin = second_depth_frame.profile.as_video_stream_profile().intrinsics
@@ -133,53 +54,43 @@ if __name__ == "__main__":
         depth_to_color_extrin = second_depth_frame.profile.get_extrinsics_to(
             color_frame.profile)
 
-        # Convert images to numpy arrays
-        depth_image = np.asanyarray(second_depth_frame.get_data())
-        color_image = np.asanyarray(color_frame.get_data())
-
         if iterCount == 0:
-            orb_detector = ORBDetector(color_image)
-            orb_detector.detect_features()
-            first_depth_frame = second_depth_frame
+            orb_detector = ORBDetector(depth_intrin=depth_intrin,use_lm=USE_LM)
+            orb_detector.set_second_frame(color_frame=color_frame,depth_frame=second_depth_frame)
+            orb_detector.detect_second_features()
         else:
             # Update a new frame by set_frame()
-            orb_detector.set_frame(color_image)
-            orb_detector.detect_features()
+            orb_detector.reset_frame(color_frame_next=color_frame,depth_frame_next=second_depth_frame)
             orb_detector.match_features()
             if orb_detector.match.__len__() != 0:
                 orb_detector.find_inlier()
 
             # Draw the features on the image for debugging
             # image = cv2.drawKeypoints(color_image, orb_detector.featureFrameB, color_image, color=(255, 0, 0))
-        if iterCount != 0:
-            image = cv2.drawMatches(orb_detector.frameA, orb_detector.featureFrameA,
-                                    orb_detector.frameB, orb_detector.featureFrameB,
-                                    orb_detector.best_matches, orb_detector.frameA)
+            image = cv2.drawMatches(orb_detector.first_color_frame, orb_detector.featureFrame_first,
+                                    orb_detector.second_color_frame, orb_detector.featureFrame_second,
+                                    orb_detector.best_matches, orb_detector.first_color_frame)
             cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('RealSense', image)
             cv2.waitKey(10)
 
             # Optimize to calculate the transition matrix
-            optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB
-                              , orb_detector.best_matches, depth_intrin,depth_frameA=first_depth_frame,depth_frameB=second_depth_frame)
-        if iterCount != 0:
-
-            optimizer.get_list()
-            if len(optimizer.listA) >= 3:
-                optimizer.optimize()
-                optimizer.get_new_pp()
-                print(iterCount,optimizer.pp)
+            orb_detector.calculate_camera_coordinates()
+            if len(orb_detector.camera_coordinate_first) >= 3:
+                orb_detector.optimize()
+                orb_detector.get_new_pp()
+                print(iterCount,ORBDetector.pp)
                 if USE_LM:
                     if not PLOT_TREJACTORY:
-                        result = str(optimizer.res.x[0] )+ ' ' + str(optimizer.res.x[1])
+                        result = str(orb_detector.res.x[0] )+ ' ' + str(orb_detector.res.x[1])
                     else:
-                        result = str(optimizer.pp[0]) + ' ' + str(optimizer.pp[1])
+                        result = str(ORBDetector.pp[0]) + ' ' + str(ORBDetector.pp[1])
 
                 else:
                     if not PLOT_TREJACTORY:
-                        result = str(optimizer.optimized_result[1]) + ' ' + str(optimizer.optimized_result[2])
+                        result = str(orb_detector.optimized_result[1]) + ' ' + str(orb_detector.optimized_result[2])
                     else:
-                        result = str(optimizer.pp[0]) + ' ' + str(optimizer.pp[1])
+                        result = str(ORBDetector.pp[0]) + ' ' + str(ORBDetector.pp[1])
                 f.write(result)
                 f.write("\n")
 
@@ -187,7 +98,6 @@ if __name__ == "__main__":
         # Update the iterCount
         if iterCount <= 10000:
             iterCount += 1
-            first_depth_frame = second_depth_frame
         orb_detector.best_matches = []
 
 
