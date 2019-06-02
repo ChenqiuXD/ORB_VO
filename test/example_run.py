@@ -1,11 +1,14 @@
 import numpy as np
 import cv2
 import os
-from main import Optimizer, ORBDetector
+from ORB_VO.main import Optimizer, ORBDetector
+import matplotlib.pyplot as plt
 
 IS_CAMERA_CONNECTED = False
-MAX_LENGTH = 5
-MAX_ITER = 100
+MAX_LENGTH = 2
+MAX_ITER = 500
+USE_LM  = True
+GAP = 2
 
 
 def change_format(value):
@@ -38,6 +41,9 @@ if __name__ == "__main__":
     i = 0
     result = open("result.txt", "w")
     for pic_name in os.listdir('../data/rgb'):
+        if i%GAP  != 0:
+            i += 1
+            continue
         if i == 0:
             first_pic = cv2.imread('../data/rgb/' + pic_name)
             first_pic = cv2.resize(first_pic, (640, 480))
@@ -69,7 +75,7 @@ if __name__ == "__main__":
 
             # Create a optimizer and find the displacement
             optimizer = Optimizer(orb_detector.featureFrameA, orb_detector.featureFrameB
-                                  , orb_detector.best_matches, depth_intrin)
+                                  , orb_detector.best_matches, depth_intrin,use_lm=USE_LM)
 
             for match in optimizer.matches:
                 img_pixel = [int(optimizer.featureA[match.queryIdx].pt[0]),
@@ -102,14 +108,20 @@ if __name__ == "__main__":
             # file_b.close()
 
             # Calculate the position
+            optimizer.get_new_pp()
             pp = optimizer.pp
             # Write the position into the file
-            content = pic_name + ' ' + str(pp) + '\n'
+            print(pic_name,pp)
+            content =  str(pp[0]) +' '+str(pp[1])+'\n'
             result.write(content)
 
         """"""
         first_pic = second_pic
         i += 1
+    arr = np.loadtxt('result.txt')
+    plt.plot(arr[:, 0], arr[:, 1])
+    plt.show()
+
 
 
 

@@ -11,10 +11,10 @@ config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 config.enable_record_to_file('test.bag')
 
+e1 = cv2.getTickCount()
+
 # Start streaming
 pipeline.start(config)
-
-e1 = cv2.getTickCount()
 
 try:
     while True:

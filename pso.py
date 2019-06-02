@@ -2,7 +2,7 @@
 
 import numpy as np
 # import matplotlib.pyplot as plt
-v_theta = 0.5*np.pi
+v_theta = 0.2*np.pi
 range_x=[-1,1]
 v_x = 1
 range_y=[-1,1]
@@ -20,7 +20,7 @@ class PSO(object):
         self.population_size = population_size  # 粒子群数量
         self.dim = 3  # 搜索空间的维度
         self.max_steps = max_steps  # 迭代次数
-        self.x_bound = [[0, 2*np.pi],range_x,range_y]  # 解空间范围
+        self.x_bound = [[-np.pi, np.pi],range_x,range_y]  # 解空间范围
         self.x = np.array([[np.random.uniform(self.x_bound[i][0], self.x_bound[i][1]) for i in
                              range(3)] for _ in range(self.population_size)])  # 初始化粒子群位置
         self.v = np.array([[np.random.uniform(self.x_bound[i][0], self.x_bound[i][1]) for i in

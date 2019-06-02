@@ -3,25 +3,28 @@
 import numpy as np
 import cv2
 import pyrealsense2 as rs
-from pso import PSO
+from ORB_VO.pso import PSO
 from scipy.optimize import least_squares
 from math import cos, sin
 
 THRESHHOLD = 30
 FEATUREMAX = 200
 INLIER_DIST_THRE = 3
-
+USE_LM = False
 
 class Optimizer:
-    def __init__(self, featureA, featureB, matches, intrinsic):
+    pp = np.array([0.0, 0.0, 0.0])  # The initial position and posture of the
+    def __init__(self, featureA, featureB, matches, intrinsic, depth_frameA,depth_frameB,use_lm = USE_LM):
+        self.USE_LM = use_lm
         self.featureA = featureA
         self.featureB = featureB
         self.matches = matches
+        self.depth_frameA = depth_frameA
+        self.depth_frameB = depth_frameB
         self.listA = []
         self.listB = []
         # Added by RK
         self.optimized_result = None
-        self.pp = np.array([197.176, 162.371, 0])  # The initial position and posture of the
         # cam, with original theta being zero
         self.intrin = intrinsic
         self.res = [0, 0, 0]
@@ -30,11 +33,17 @@ class Optimizer:
         """This method get the list A and B by rs.deproject function"""
         for match in self.matches:
             img_pixel = [int(self.featureA[match.queryIdx].pt[0]), int(self.featureA[match.queryIdx].pt[1])]
-            depth = aligned_depth_frame.get_distance(img_pixel[0], img_pixel[1])
+            depth = self.depth_frameA.get_distance(img_pixel[0], img_pixel[1])
+            if depth >=6 or depth<=0.1:
+                continue
+            # print(depth)
             point_a = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
             point_a = [point_a[0], point_a[2], 1]
             img_pixel = [int(self.featureB[match.trainIdx].pt[0]), int(self.featureB[match.trainIdx].pt[1])]
-            depth = aligned_depth_frame.get_distance(img_pixel[0], img_pixel[1])
+            if depth >=6 or depth<=0.1:
+                continue
+            # print(depth)
+            depth = self.depth_frameB.get_distance(img_pixel[0], img_pixel[1])
             point_b = rs.rs2_deproject_pixel_to_point(self.intrin, img_pixel, depth)
             point_b = [point_b[0], point_b[2], 1]
             self.listA.append(point_a)
@@ -42,10 +51,16 @@ class Optimizer:
 
     def get_new_pp(self):
         # cam_displace = self.optimized_result[[1, 2, 0]]
-        self.pp[2] += self.res.x[2]
-        tm = np.array([[np.cos(self.pp[2]), -np.sin(self.pp[2])],
-                      [np.sin(self.pp[2]), np.cos(self.pp[2])]])
-        self.pp[:2] = tm.dot(self.res.x[:2])
+        if USE_LM:
+            Optimizer.pp[2] += self.res.x[2]
+            tm = np.array([[np.cos(Optimizer.pp[2]), -np.sin(Optimizer.pp[2])],
+                          [np.sin(Optimizer.pp[2]), np.cos(Optimizer.pp[2])]])
+            Optimizer.pp[:2] += tm.dot(self.res.x[:2])
+        else:
+            Optimizer.pp[2] += self.optimized_result[0]
+            tm = np.array([[np.cos(Optimizer.pp[2]), -np.sin(Optimizer.pp[2])],
+                           [np.sin(Optimizer.pp[2]), np.cos(Optimizer.pp[2])]])
+            Optimizer.pp[:2] += tm.dot(self.optimized_result[1:3])
 
     def func(self, x):
         """Cost function used for optimization. Variables are defined as follows:
@@ -60,8 +75,17 @@ class Optimizer:
 
     def optimize(self):
         """LM method by scipy"""
-        x0 = [0, 0, 0]
-        self.res = least_squares(self.func, x0, method='lm')
+        if self.USE_LM:
+            x0 = [0, 0, 0]
+            self.res = least_squares(self.func, x0, method='lm')
+            self.res.x *= 100
+        else:
+            pso_optimizer = PSO( population_size=10, max_steps=50, pA=self.listA, pB=self.listB)
+            self.optimized_result = pso_optimizer.evolve()
+            self.optimized_result[1:3] = 100*self.optimized_result[1:3]
+
+
+
 
 
 class ORBDetector:
