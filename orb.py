@@ -2,6 +2,7 @@ import numpy as np
 import pyrealsense2 as rs
 import cv2
 from math import sin, cos
+import math
 from ORB_VO.pso import PSO
 from scipy.optimize import least_squares
 
@@ -12,10 +13,12 @@ INLIER_DIST_THRE = 3
 MAX_DIS = 4
 MIN_DIS = 0.5
 
+
 class ORBDetector:
     pp = np.array([0.0, 0.0, 0.0])  # The initial position and posture of the
+    tm = np.eye(4)
 
-    def __init__(self, depth_intrin, use_lm=USE_LM,inlier_thre = INLIER_DIST_THRE,max_dis=MAX_DIS,min_dis=MIN_DIS):
+    def __init__(self, depth_intrin, use_lm=USE_LM, inlier_thre=INLIER_DIST_THRE, max_dis=MAX_DIS, min_dis=MIN_DIS):
         self.first_color_frame = []
         self.second_color_frame = []
         self.featureDes_first = []
@@ -36,6 +39,7 @@ class ORBDetector:
         self.world_coordinate_second = []
         self.camera_coordinate_second = []
         self.res = [0, 0, 0]
+        self.displace_mat = []
 
     def set_first_frame(self, color_frame, depth_frame):
         self.first_color_frame = np.asanyarray(color_frame.get_data())
@@ -52,8 +56,14 @@ class ORBDetector:
         self.featureFrame_first = self.featureFrame_second
         self.first_color_frame = self.second_color_frame
         self.first_depth_frame = self.second_depth_frame
+
         self.second_color_frame = np.asanyarray(color_frame_next.get_data())
         self.second_depth_frame = depth_frame_next
+        self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
+
+    def detect_all_features(self):
+        """For debugging in test.py, would not be called in read_from_bag"""
+        self.featureFrame_first, self.featureDes_first = self.orb.detectAndCompute(self.first_color_frame, None)
         self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
 
     def detect_second_features(self):
@@ -85,6 +95,44 @@ class ORBDetector:
                 best_matchVal = self.W[len_of_match][i]
                 best_matchIdx = i
         return best_matchIdx
+
+    def find_inlier_without_depth(self):
+        """This method execute the A4 step of the journal"""
+        len_of_matches = len(self.match)
+        # The last line of W stores the whole number of consistency of this match
+        self.W = np.zeros((len_of_matches + 1, len_of_matches))
+        for i in np.arange(len_of_matches):
+            for j in np.arange(len_of_matches):
+                if i >= j:
+                    continue
+
+                # ASSUMPTION : the index of descriptor is the same with the index of image
+                wa = self.featureFrame_first[self.match[i].queryIdx].pt[0] - \
+                     self.featureFrame_first[self.match[j].queryIdx].pt[0]
+                wb = self.featureFrame_first[self.match[i].queryIdx].pt[1] - \
+                     self.featureFrame_first[self.match[j].queryIdx].pt[1]
+                wa_ = self.featureFrame_second[self.match[i].trainIdx].pt[0] - \
+                      self.featureFrame_second[self.match[j].trainIdx].pt[0]
+                wb_ = self.featureFrame_second[self.match[i].trainIdx].pt[1] - \
+                      self.featureFrame_second[self.match[j].trainIdx].pt[1]
+                # Todo: based on the three dimension imformation
+
+                # Compare and complete the matrix W
+                if abs(wa - wa_) + abs(wb - wb_) <= self.INLIER_DIST_THRE:
+                    self.W[i, j] = 1
+                    self.W[j, i] = 1
+                    self.W[len_of_matches, j] += 1
+
+        # Choose the best inlier features
+        self.best_matches = []
+        candidate = np.arange(len_of_matches)
+        while True:
+            best_matchIdx = self.find_most_compatible_match(candidate)
+            if not best_matchIdx or best_matchIdx == -1:  # in case no best match is found
+                break
+            else:
+                self.best_matches.append(self.match[best_matchIdx])
+                candidate = np.delete(candidate, np.where(candidate == best_matchIdx), axis=0)
 
     def find_inlier(self):
         """This method execute the A4 step of the journal"""
@@ -145,24 +193,26 @@ class ORBDetector:
                          int(self.featureFrame_first[match.queryIdx].pt[1])]
             depth = self.first_depth_frame.get_distance(img_pixel[0], img_pixel[1])
             if depth >= self.max_dis or depth <= self.min_dis:
-                print(depth)
+                # print(depth)
                 continue
             # print(depth)
             point_a = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel, depth)
             # threeD_file.write(str(point_a[1]))
             # threeD_file.write("\n")
-            point_a = [point_a[0], point_a[2], 1]
+            # point_a = [point_a[0], point_a[2], 1]
+
             img_pixel = [int(self.featureFrame_second[match.trainIdx].pt[0]),
                          int(self.featureFrame_second[match.trainIdx].pt[1])]
-            if depth >= self.max_dis or depth <= self.min_dis:
-                print(depth)
-                continue
-            # print(depth)
             depth = self.second_depth_frame.get_distance(img_pixel[0], img_pixel[1])
-            point_b = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel, depth)
+            if depth >= self.max_dis or depth <= self.min_dis:
+                # print(depth)
+                continue
+            point_b = img_pixel
+            # print(depth)
+            # point_b = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel, depth)
             # threeD_file.write(str(point_b[1]))
             # threeD_file.write("\n")
-            point_b = [point_b[0], point_b[2], 1]
+            # point_b = [point_b[0], point_b[2], 1]
             self.camera_coordinate_first.append(point_a)
             self.camera_coordinate_second.append(point_b)
 
@@ -174,19 +224,36 @@ class ORBDetector:
         result = []
         for j in np.arange(self.camera_coordinate_first.__len__()):
             result.append(self.camera_coordinate_second[j][0] - (
-                        cos(x[2]) * self.camera_coordinate_first[j][0] - sin(x[2]) * self.camera_coordinate_first[j][
-                    1] + x[0]))
+                        cos(x[2]) * self.camera_coordinate_first[j][0] -
+                        sin(x[2]) * self.camera_coordinate_first[j][1] + x[0]))
             result.append(self.camera_coordinate_second[j][1] - (
-                        sin(x[2]) * self.camera_coordinate_first[j][0] + cos(x[2]) * self.camera_coordinate_first[j][
-                    1] + x[1]))
+                        sin(x[2]) * self.camera_coordinate_first[j][0] +
+                        cos(x[2]) * self.camera_coordinate_first[j][1] + x[1]))
         return np.asarray(result)
 
     def optimize(self):
         """LM method by scipy"""
         if self.USE_LM:
-            x0 = [0, 0, 0]
-            self.res = least_squares(self.func, x0, method='lm')
-            self.res.x *= 100
+            # Use opencv function solvePnPRansac to get translational and rotational movement
+            list_a = np.array(self.camera_coordinate_first,
+                              dtype=np.float32).reshape((len(self.camera_coordinate_first), 1, 3))
+            list_b = np.array(self.camera_coordinate_second,
+                              dtype=np.float32).reshape((len(self.camera_coordinate_second), 1, 2))
+            camera_mat = np.array([[self.depth_intrin.fx, 0, self.depth_intrin.ppx],
+                                   [0, self.depth_intrin.fy, self.depth_intrin.ppy],
+                                   [0, 0, 1]])
+            dist = np.zeros(5)
+            retval, rvec, tvec, _ = cv2.solvePnPRansac(list_a, list_b, camera_mat, distCoeffs=dist)
+            rvec, _ = cv2.Rodrigues(rvec)
+
+            # Use the result above as initial value for further optimize to get delta_x, delta_y and delta_theta
+            # x0 = [tvec[0], tvec[2], 0]
+            # self.res = least_squares(self.func, x0, method='lm')
+            # self.res.x *= 100
+
+            # Calculate the displacement matrix
+            temp = np.hstack((rvec, tvec))
+            self.displace_mat = np.vstack((temp, [0, 0, 0, 1]))
         else:
             pso_ORBDetector = PSO(population_size=10, max_steps=50, pA=self.camera_coordinate_first, pB=self.listB)
             self.optimized_result = pso_ORBDetector.evolve()
@@ -194,13 +261,16 @@ class ORBDetector:
 
     def get_new_pp(self):
         # cam_displace = self.optimized_result[[1, 2, 0]]
-        if self.USE_LM:
-            ORBDetector.pp[2] += self.res.x[2]
-            tm = np.array([[np.cos(ORBDetector.pp[2]), -np.sin(ORBDetector.pp[2])],
-                           [np.sin(ORBDetector.pp[2]), np.cos(ORBDetector.pp[2])]])
-            ORBDetector.pp[:2] += tm.dot(self.res.x[:2])
-        else:
-            ORBDetector.pp[2] += self.optimized_result[0]
-            tm = np.array([[np.cos(ORBDetector.pp[2]), -np.sin(ORBDetector.pp[2])],
-                           [np.sin(ORBDetector.pp[2]), np.cos(ORBDetector.pp[2])]])
-            ORBDetector.pp[:2] += tm.dot(self.optimized_result[1:3])
+        # if self.USE_LM:
+        #     ORBDetector.pp[2] += self.res.x[2]
+        #     tm = np.array([[np.cos(ORBDetector.pp[2]), -np.sin(ORBDetector.pp[2])],
+        #                    [np.sin(ORBDetector.pp[2]), np.cos(ORBDetector.pp[2])]])
+        #     ORBDetector.pp[:2] += tm.dot(self.res.x[:2])
+        # else:
+        #     ORBDetector.pp[2] += self.optimized_result[0]
+        #     tm = np.array([[np.cos(ORBDetector.pp[2]), -np.sin(ORBDetector.pp[2])],
+        #                    [np.sin(ORBDetector.pp[2]), np.cos(ORBDetector.pp[2])]])
+        #     ORBDetector.pp[:2] += tm.dot(self.optimized_result[1:3])
+        ORBDetector.tm = np.dot(ORBDetector.tm, self.displace_mat)
+        ORBDetector.pp = np.array([ORBDetector.tm[0, 3], ORBDetector.tm[2, 3], math.atan2(ORBDetector.tm[1, 0],
+                                                                                          ORBDetector.tm[0, 0])])

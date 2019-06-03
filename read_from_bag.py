@@ -3,17 +3,20 @@ import pyrealsense2 as rs
 import numpy as np
 from ORB_VO.orb import ORBDetector
 
-USE_LM =True
-BAG_NAME = '20190602_095040.bag'
+USE_LM = True
+BAG_NAME = '20190603_092727.bag'
 MAX_DIS = 4
 MIN_DIS = 0.5
-GAP = 20
-PLOT_TRAJECTORY = False
+GAP = 3
+PLOT_TRAJECTORY = True
+MAX_ITER = 1000
 
 if __name__ == "__main__":
+    file_path = 'bag/' + BAG_NAME
+
     p = rs.pipeline()
     cfg = rs.config()
-    cfg.enable_device_from_file(BAG_NAME)
+    cfg.enable_device_from_file(file_path)
     prof = p.start(cfg)
 
     prof.get_device().as_playback().set_real_time(False)
@@ -30,10 +33,10 @@ if __name__ == "__main__":
         frames = p.wait_for_frames()
     f = open('result_new.txt', 'w')
     iterCount = 0
-    while iterCount<2000:
+    while iterCount < MAX_ITER:
         # Wait for a coherent pair of frames: depth and color
         frames = p.wait_for_frames()
-        if iterCount%GAP !=0:
+        if iterCount % GAP != 0:
             iterCount += 1
             continue
             
@@ -61,44 +64,54 @@ if __name__ == "__main__":
             if orb_detector.match.__len__() != 0:
                 orb_detector.find_inlier()
 
-            # Draw the features on the image for debugging
-            # image = cv2.drawKeypoints(color_image, orb_detector.featureFrameB, color_image, color=(255, 0, 0))
-            image = cv2.drawMatches(orb_detector.first_color_frame, orb_detector.featureFrame_first,
-                                    orb_detector.second_color_frame, orb_detector.featureFrame_second,
-                                    orb_detector.best_matches, orb_detector.first_color_frame)
-            cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('RealSense', image)
-            cv2.waitKey(10)
-
             # Optimize to calculate the transition matrix
             orb_detector.calculate_camera_coordinates()
             if len(orb_detector.camera_coordinate_first) >= 3:
                 orb_detector.optimize()
                 orb_detector.get_new_pp()
-                print(iterCount,ORBDetector.pp)
+                # print(iterCount, ORBDetector.pp)
                 if USE_LM:
                     if not PLOT_TRAJECTORY:
-                        result = str(orb_detector.res.x[0] )+ ' ' + str(orb_detector.res.x[1])
-                    else:
                         result = str(ORBDetector.pp[0]) + ' ' + str(ORBDetector.pp[1])
+                    else:
+                        result = str(ORBDetector.tm[0, 3]) + ' ' + str(ORBDetector.tm[2, 3])
 
                 else:
                     if not PLOT_TRAJECTORY:
                         result = str(orb_detector.optimized_result[1]) + ' ' + str(orb_detector.optimized_result[2])
                     else:
                         result = str(ORBDetector.pp[0]) + ' ' + str(ORBDetector.pp[1])
+                print(str(iterCount) + ' ' + result)
                 f.write(result)
                 f.write("\n")
 
+
+        # Draw the features on the image for debugging
+        if iterCount != 0:
+            image = cv2.drawMatches(orb_detector.first_color_frame, orb_detector.featureFrame_first,
+                                    orb_detector.second_color_frame, orb_detector.featureFrame_second,
+                                    orb_detector.best_matches, orb_detector.first_color_frame)
+            if PLOT_TRAJECTORY:
+                for i in range(4):
+                    text = str(orb_detector.tm[i, :])
+                    cv2.putText(image, text, (40, 50 + 20 * i), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 255), 2)
+            else:
+                for i in range(4):
+                    text = str(orb_detector.displace_mat[i, :])
+                    cv2.putText(image, text, (40, 50 + 20 * i), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 255), 2)
+            cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
+            cv2.imshow('RealSense', image)
+            cv2.waitKey(2)
 
         # Update the iterCount
         if iterCount <= 10000:
             iterCount += 1
         orb_detector.best_matches = []
 
-
         # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
         # cv2.imshow('RealSense', depth_image)
         # cv2.waitKey(10)
+
+    cv2.destroyAllWindows()
     f.close()
     p.stop()

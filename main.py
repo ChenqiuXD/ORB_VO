@@ -17,9 +17,6 @@ PLOT_TREJACTORY = True
 # threeD_file = open('3D_file.txt','a')
 
 
-
-
-
 if __name__ == "__main__":
     pipe = rs.pipeline()
     config = rs.config()
