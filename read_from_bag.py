@@ -1,16 +1,14 @@
 import cv2
 import pyrealsense2 as rs
 import numpy as np
-from ORB_VO.main import ORBDetector
-from math import sin,cos
-from ORB_VO.pso import PSO
-from scipy.optimize import least_squares
+from ORB_VO.orb import ORBDetector
+
 USE_LM =True
 BAG_NAME = '20190602_095040.bag'
 MAX_DIS = 4
 MIN_DIS = 0.5
 GAP = 20
-PLOT_TREJACTORY = True
+PLOT_TRAJECTORY = False
 
 if __name__ == "__main__":
     p = rs.pipeline()
@@ -79,13 +77,13 @@ if __name__ == "__main__":
                 orb_detector.get_new_pp()
                 print(iterCount,ORBDetector.pp)
                 if USE_LM:
-                    if not PLOT_TREJACTORY:
+                    if not PLOT_TRAJECTORY:
                         result = str(orb_detector.res.x[0] )+ ' ' + str(orb_detector.res.x[1])
                     else:
                         result = str(ORBDetector.pp[0]) + ' ' + str(ORBDetector.pp[1])
 
                 else:
-                    if not PLOT_TREJACTORY:
+                    if not PLOT_TRAJECTORY:
                         result = str(orb_detector.optimized_result[1]) + ' ' + str(orb_detector.optimized_result[2])
                     else:
                         result = str(ORBDetector.pp[0]) + ' ' + str(ORBDetector.pp[1])
