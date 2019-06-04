@@ -4,11 +4,11 @@ import numpy as np
 from ORB_VO.orb import ORBDetector
 
 USE_LM = True
-BAG_NAME = '20190603_092727.bag'
+BAG_NAME = '20190603_092006.bag'
 MAX_DIS = 4
 MIN_DIS = 0.5
-GAP = 3
-PLOT_TRAJECTORY = True
+GAP = 5
+PLOT_TRAJECTORY = False
 MAX_ITER = 1000
 
 if __name__ == "__main__":
@@ -101,7 +101,7 @@ if __name__ == "__main__":
                     cv2.putText(image, text, (40, 50 + 20 * i), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 255), 2)
             cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('RealSense', image)
-            cv2.waitKey(2)
+            cv2.waitKey(0)
 
         # Update the iterCount
         if iterCount <= 10000:

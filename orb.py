@@ -9,7 +9,7 @@ from scipy.optimize import least_squares
 USE_LM = True
 THRESHHOLD = 30
 FEATUREMAX = 200
-INLIER_DIST_THRE = 3
+INLIER_DIST_THRE = 1
 MAX_DIS = 4
 MIN_DIS = 0.5
 
@@ -19,10 +19,16 @@ class ORBDetector:
     tm = np.eye(4)
 
     def __init__(self, depth_intrin, use_lm=USE_LM, inlier_thre=INLIER_DIST_THRE, max_dis=MAX_DIS, min_dis=MIN_DIS):
+        # Every frame has four attribute : color_frame, depth_frame, features, feature_descriptorss.
         self.first_color_frame = []
         self.second_color_frame = []
+        self.first_depth_frame = []
+        self.second_depth_frame = []
+        self.featureFrame_first = []
+        self.featureFrame_second = []
         self.featureDes_first = []
         self.featureDes_second = []
+
         self.depth_intrin = depth_intrin
         self.orb = cv2.ORB_create(nfeatures=FEATUREMAX, fastThreshold=THRESHHOLD)
         self.USE_LM = use_lm
@@ -34,10 +40,15 @@ class ORBDetector:
         self.match = []
         self.W = []
         self.best_matches = []
-        self.world_coordinate_first = []
+
+        # The following part stores the coordinate of the features
+        # self.world_coordinate_first = []
         self.camera_coordinate_first = []
-        self.world_coordinate_second = []
+        # self.world_coordinate_second = []
         self.camera_coordinate_second = []
+        self.camera_pixel_second = []
+
+        # self.res is the brief for result, displace_mat is a 4*4 matrix representing the homogeneous transform matrix
         self.res = [0, 0, 0]
         self.displace_mat = []
 
@@ -62,7 +73,7 @@ class ORBDetector:
         self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
 
     def detect_all_features(self):
-        """For debugging in test.py, would not be called in read_from_bag"""
+        """For debugging in test.py, would not be called in read_from_bag or example_run"""
         self.featureFrame_first, self.featureDes_first = self.orb.detectAndCompute(self.first_color_frame, None)
         self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
 
@@ -77,6 +88,7 @@ class ORBDetector:
          and only take the strongest 50"""
         type_of_None = type(None)
         if type(self.featureDes_first) != type_of_None and type(self.featureDes_second) != type_of_None:
+            # IMPORTANT : match(queryDescriptors, trainDescriptors)
             matches = self.bfMatcher.match(self.featureDes_first, self.featureDes_second)
             self.match = sorted(matches, key=lambda x: x.distance)
             self.match = self.match[:50]
@@ -115,7 +127,6 @@ class ORBDetector:
                       self.featureFrame_second[self.match[j].trainIdx].pt[0]
                 wb_ = self.featureFrame_second[self.match[i].trainIdx].pt[1] - \
                       self.featureFrame_second[self.match[j].trainIdx].pt[1]
-                # Todo: based on the three dimension imformation
 
                 # Compare and complete the matrix W
                 if abs(wa - wa_) + abs(wb - wb_) <= self.INLIER_DIST_THRE:
@@ -191,7 +202,9 @@ class ORBDetector:
         for match in self.best_matches:
             img_pixel = [int(self.featureFrame_first[match.queryIdx].pt[0]),
                          int(self.featureFrame_first[match.queryIdx].pt[1])]
-            depth = self.first_depth_frame.get_distance(img_pixel[0], img_pixel[1])
+            # !!!!!!!!!!!!!!!!!!!!!!!!! CAUTIOUS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+            # The camera coordinate is different from ndarray coordinate from that their x and y axis are reversed
+            depth = self.first_depth_frame.get_distance(img_pixel[1], img_pixel[0])
             if depth >= self.max_dis or depth <= self.min_dis:
                 # print(depth)
                 continue
@@ -203,32 +216,41 @@ class ORBDetector:
 
             img_pixel = [int(self.featureFrame_second[match.trainIdx].pt[0]),
                          int(self.featureFrame_second[match.trainIdx].pt[1])]
-            depth = self.second_depth_frame.get_distance(img_pixel[0], img_pixel[1])
+            depth = self.second_depth_frame.get_distance(img_pixel[1], img_pixel[0])
             if depth >= self.max_dis or depth <= self.min_dis:
                 # print(depth)
                 continue
-            point_b = img_pixel
+            point_b_pixel = img_pixel
             # print(depth)
-            # point_b = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel, depth)
+            point_b = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel, depth)
             # threeD_file.write(str(point_b[1]))
             # threeD_file.write("\n")
             # point_b = [point_b[0], point_b[2], 1]
             self.camera_coordinate_first.append(point_a)
+            self.camera_pixel_second.append(point_b_pixel)
             self.camera_coordinate_second.append(point_b)
 
     def func(self, x):
         """Cost function used for optimization. Variables are defined as follows:
-        x = [delta_x, delta_y, delta_theta]
-        self.camera_coordinate_first = [x, y, 1]
-        self.listB = [x, y, 1]"""
+        x = [delta_x, delta_z, delta_θ] the sign of delta should refer to the camera coordinate
+        self.camera_coordinate_first = [x_a, y_a, z_a]
+        self.camera_coordinate_second = [x_b, y_b, z_b]
+        P.S. the y_a should approximately equal to y_b coz the height of camera remains the same
+        The function could be illustrate as follows:
+            [x_b]   [cos(d_θ)   0  sin(d_θ) d_x] [x_a]
+            |y_b| = |     0     1       0   d_y| |y_a|
+            |z_b| = |-sin(d_θ)  0  cos(d_θ) d_z| |z_a|
+            [1  ]   [     0     0       0    1 ] [ 1 ]
+        d_y approximately equals to 0
+        """
         result = []
-        for j in np.arange(self.camera_coordinate_first.__len__()):
+        for j in range(len(self.camera_coordinate_first)):
             result.append(self.camera_coordinate_second[j][0] - (
-                        cos(x[2]) * self.camera_coordinate_first[j][0] -
-                        sin(x[2]) * self.camera_coordinate_first[j][1] + x[0]))
-            result.append(self.camera_coordinate_second[j][1] - (
-                        sin(x[2]) * self.camera_coordinate_first[j][0] +
-                        cos(x[2]) * self.camera_coordinate_first[j][1] + x[1]))
+                        cos(x[2]) * self.camera_coordinate_first[j][0] +
+                        sin(x[2]) * self.camera_coordinate_first[j][2] + x[0]))
+            result.append(self.camera_coordinate_second[j][2] - (
+                        - sin(x[2]) * self.camera_coordinate_first[j][0] +
+                        cos(x[2]) * self.camera_coordinate_first[j][2] + x[1]))
         return np.asarray(result)
 
     def optimize(self):
@@ -237,8 +259,8 @@ class ORBDetector:
             # Use opencv function solvePnPRansac to get translational and rotational movement
             list_a = np.array(self.camera_coordinate_first,
                               dtype=np.float32).reshape((len(self.camera_coordinate_first), 1, 3))
-            list_b = np.array(self.camera_coordinate_second,
-                              dtype=np.float32).reshape((len(self.camera_coordinate_second), 1, 2))
+            list_b = np.array(self.camera_pixel_second,
+                              dtype=np.float32).reshape((len(self.camera_pixel_second), 1, 2))
             camera_mat = np.array([[self.depth_intrin.fx, 0, self.depth_intrin.ppx],
                                    [0, self.depth_intrin.fy, self.depth_intrin.ppy],
                                    [0, 0, 1]])
@@ -247,8 +269,8 @@ class ORBDetector:
             rvec, _ = cv2.Rodrigues(rvec)
 
             # Use the result above as initial value for further optimize to get delta_x, delta_y and delta_theta
-            # x0 = [tvec[0], tvec[2], 0]
-            # self.res = least_squares(self.func, x0, method='lm')
+            x0 = [tvec[0], tvec[2], math.atan2(rvec[0, 2], rvec[0, 0])]
+            self.res = least_squares(self.func, x0, method='lm')
             # self.res.x *= 100
 
             # Calculate the displacement matrix
@@ -271,6 +293,7 @@ class ORBDetector:
         #     tm = np.array([[np.cos(ORBDetector.pp[2]), -np.sin(ORBDetector.pp[2])],
         #                    [np.sin(ORBDetector.pp[2]), np.cos(ORBDetector.pp[2])]])
         #     ORBDetector.pp[:2] += tm.dot(self.optimized_result[1:3])
+
         ORBDetector.tm = np.dot(ORBDetector.tm, self.displace_mat)
         ORBDetector.pp = np.array([ORBDetector.tm[0, 3], ORBDetector.tm[2, 3], math.atan2(ORBDetector.tm[1, 0],
                                                                                           ORBDetector.tm[0, 0])])
