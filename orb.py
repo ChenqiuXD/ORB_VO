@@ -12,6 +12,7 @@ FEATUREMAX = 200
 INLIER_DIST_THRE = 1
 MAX_DIS = 4
 MIN_DIS = 0.5
+WHITE_THRE = 675
 
 
 class ORBDetector:
@@ -44,12 +45,15 @@ class ORBDetector:
         # The following part stores the coordinate of the features
         # self.world_coordinate_first = []
         self.camera_coordinate_first = []
+        self.camera_pixel_first = []
         # self.world_coordinate_second = []
         self.camera_coordinate_second = []
         self.camera_pixel_second = []
 
         # self.res is the brief for result, displace_mat is a 4*4 matrix representing the homogeneous transform matrix
         self.res = [0, 0, 0]
+        self.dtheta = 0
+        self.tvec = [0, 0, 0]
         self.displace_mat = []
 
     def set_first_frame(self, color_frame, depth_frame):
@@ -178,7 +182,6 @@ class ORBDetector:
                 depth1 = self.second_depth_frame.get_distance(img_pixel1_[0], img_pixel1_[1])
                 depth2 = self.second_depth_frame.get_distance(img_pixel2_[0], img_pixel2_[1])
                 wc_ = depth1 - depth2
-                # Todo: based on the three dimension imformation
 
                 # Compare and complete the matrix W
                 if abs(wa - wa_) + abs(wb - wb_) + abs(wc - wc_) <= self.INLIER_DIST_THRE:
@@ -200,32 +203,28 @@ class ORBDetector:
     def calculate_camera_coordinates(self):
         """This method get the list A and B by rs.deproject function"""
         for match in self.best_matches:
-            img_pixel = [int(self.featureFrame_first[match.queryIdx].pt[0]),
-                         int(self.featureFrame_first[match.queryIdx].pt[1])]
             # !!!!!!!!!!!!!!!!!!!!!!!!! CAUTIOUS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
             # The camera coordinate is different from ndarray coordinate from that their x and y axis are reversed
+            img_pixel = [int(self.featureFrame_first[match.queryIdx].pt[0]),
+                         int(self.featureFrame_first[match.queryIdx].pt[1])]
             depth = self.first_depth_frame.get_distance(img_pixel[1], img_pixel[0])
             if depth >= self.max_dis or depth <= self.min_dis:
-                # print(depth)
+                self.best_matches.remove(match)
                 continue
-            # print(depth)
+
+            point_a_pixel = img_pixel
             point_a = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel, depth)
-            # threeD_file.write(str(point_a[1]))
-            # threeD_file.write("\n")
-            # point_a = [point_a[0], point_a[2], 1]
 
             img_pixel = [int(self.featureFrame_second[match.trainIdx].pt[0]),
                          int(self.featureFrame_second[match.trainIdx].pt[1])]
             depth = self.second_depth_frame.get_distance(img_pixel[1], img_pixel[0])
             if depth >= self.max_dis or depth <= self.min_dis:
-                # print(depth)
+                self.best_matches.remove(match)
                 continue
             point_b_pixel = img_pixel
-            # print(depth)
             point_b = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel, depth)
-            # threeD_file.write(str(point_b[1]))
-            # threeD_file.write("\n")
-            # point_b = [point_b[0], point_b[2], 1]
+
+            self.camera_pixel_first.append(point_a_pixel)
             self.camera_coordinate_first.append(point_a)
             self.camera_pixel_second.append(point_b_pixel)
             self.camera_coordinate_second.append(point_b)
@@ -246,16 +245,23 @@ class ORBDetector:
         result = []
         for j in range(len(self.camera_coordinate_first)):
             result.append(self.camera_coordinate_second[j][0] - (
-                        cos(x[2]) * self.camera_coordinate_first[j][0] +
-                        sin(x[2]) * self.camera_coordinate_first[j][2] + x[0]))
+                        cos(self.dtheta) * self.camera_coordinate_first[j][0] +
+                        sin(self.dtheta) * self.camera_coordinate_first[j][2] + x[0]))
             result.append(self.camera_coordinate_second[j][2] - (
-                        - sin(x[2]) * self.camera_coordinate_first[j][0] +
-                        cos(x[2]) * self.camera_coordinate_first[j][2] + x[1]))
+                        - sin(self.dtheta) * self.camera_coordinate_first[j][0] +
+                        cos(self.dtheta) * self.camera_coordinate_first[j][2] + x[1]))
         return np.asarray(result)
 
     def optimize(self):
         """LM method by scipy"""
         if self.USE_LM:
+            # self.res = least_squares(self.func, [0, 0, self.dtheta], method='lm')
+            # x = self.res.x
+            # self.displace_mat = np.array([[cos(x[2]), 0, -sin(x[2]), x[0]],
+            #                               [0, 1, 0, 0],
+            #                               [sin(x[2]), 0, cos(x[2]),  x[1]],
+            #                               [0, 0, 0, 1]])
+
             # Use opencv function solvePnPRansac to get translational and rotational movement
             list_a = np.array(self.camera_coordinate_first,
                               dtype=np.float32).reshape((len(self.camera_coordinate_first), 1, 3))
@@ -265,17 +271,24 @@ class ORBDetector:
                                    [0, self.depth_intrin.fy, self.depth_intrin.ppy],
                                    [0, 0, 1]])
             dist = np.zeros(5)
-            retval, rvec, tvec, _ = cv2.solvePnPRansac(list_a, list_b, camera_mat, distCoeffs=dist)
+            retval, rvec, tvec, _ = cv2.solvePnPRansac(list_a, list_b, camera_mat,
+                                                       distCoeffs=dist, useExtrinsicGuess=False,
+                                                       iterationsCount=100, reprojectionError=4.0,
+                                                       confidence=0.99, flags=cv2.SOLVEPNP_EPNP)
             rvec, _ = cv2.Rodrigues(rvec)
 
-            # Use the result above as initial value for further optimize to get delta_x, delta_y and delta_theta
-            x0 = [tvec[0], tvec[2], math.atan2(rvec[0, 2], rvec[0, 0])]
-            self.res = least_squares(self.func, x0, method='lm')
-            # self.res.x *= 100
+            # If the result is too big, assign eye(4) to it
+            if cv2.norm(tvec) >= 5:
+                self.displace_mat = np.eye(4)
+            else:
+                # Use the result above as initial value for further optimize to get delta_x, delta_y and delta_theta
+                x0 = [tvec[0], tvec[2], math.atan2(rvec[0, 2], rvec[0, 0])]
+                self.res = least_squares(self.func, x0, method='lm')
+                self.res.x *= 100
 
-            # Calculate the displacement matrix
-            temp = np.hstack((rvec, tvec))
-            self.displace_mat = np.vstack((temp, [0, 0, 0, 1]))
+                # Calculate the displacement matrix
+                temp = np.hstack((rvec, tvec))
+                self.displace_mat = np.vstack((temp, [0, 0, 0, 1]))
         else:
             pso_ORBDetector = PSO(population_size=10, max_steps=50, pA=self.camera_coordinate_first, pB=self.listB)
             self.optimized_result = pso_ORBDetector.evolve()
@@ -293,7 +306,21 @@ class ORBDetector:
         #     tm = np.array([[np.cos(ORBDetector.pp[2]), -np.sin(ORBDetector.pp[2])],
         #                    [np.sin(ORBDetector.pp[2]), np.cos(ORBDetector.pp[2])]])
         #     ORBDetector.pp[:2] += tm.dot(self.optimized_result[1:3])
-
+        row, col = self.displace_mat.shape
+        for i in range(row):
+            for j in range(col):
+                self.displace_mat[i, j] = round(self.displace_mat[i, j], 3)
         ORBDetector.tm = np.dot(ORBDetector.tm, self.displace_mat)
         ORBDetector.pp = np.array([ORBDetector.tm[0, 3], ORBDetector.tm[2, 3], math.atan2(ORBDetector.tm[1, 0],
                                                                                           ORBDetector.tm[0, 0])])
+
+    def get_rvec(self):
+        feature_frame1_farest = np.array(sorted(self.camera_coordinate_first, key=lambda x: x[2])[:3])
+        feature_frame2_farest = np.array(sorted(self.camera_coordinate_second, key=lambda x: x[2])[:3])
+        d_theta = []
+        for pt1 in feature_frame1_farest:
+            dist = abs(pt1[1]*np.array([1, 1, 1]) - feature_frame2_farest[:, 1])
+            min_index = np.where(dist==min(dist))
+            d_theta.append((pt1[0] - feature_frame2_farest[min_index[0][0]][0])/pt1[2])
+        self.dtheta = sum(d_theta)/3
+
