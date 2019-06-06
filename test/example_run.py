@@ -10,7 +10,7 @@ MAX_ITER = 2000
 USE_LM = True
 GAP = 5
 # DEPTH_SCALE = 0.001
-PLOT_TRAJECTORY = False
+PLOT_TRAJECTORY = True
 
 
 def change_format(value):
@@ -146,9 +146,9 @@ if __name__ == "__main__":
                                         orb_detector.second_color_frame, orb_detector.featureFrame_second,
                                         orb_detector.best_matches, orb_detector.first_color_frame)
                 if PLOT_TRAJECTORY:
-                    for i in range(4):
-                        text = str(orb_detector.tm[i, :])
-                        cv2.putText(image, text, (40, 50+20*i), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 255), 2)
+                    for j in range(4):
+                        text = str(orb_detector.tm[j, :])
+                        cv2.putText(image, text, (40, 50+20*j), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 255), 2)
                 else:
                     text = str(orb_detector.res.x)
                     cv2.putText(image, text, (40, 50), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 255), 2)

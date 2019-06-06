@@ -5,6 +5,7 @@ import cv2
 from math import sin, cos
 import math
 from pso import PSO
+import icp.icp as icp
 from scipy.optimize import least_squares
 
 USE_LM = True
@@ -256,25 +257,30 @@ class ORBDetector:
         """LM method by scipy"""
         if self.USE_LM:
             # Use opencv function solvePnPRansac to get translational and rotational movement
-            list_a = np.array(self.camera_coordinate_first,
-                              dtype=np.float32).reshape((len(self.camera_coordinate_first), 1, 3))
-            list_b = np.array(self.camera_pixel_second,
-                              dtype=np.float32).reshape((len(self.camera_pixel_second), 1, 2))
-            camera_mat = np.array([[self.depth_intrin.fx, 0, self.depth_intrin.ppx],
-                                   [0, self.depth_intrin.fy, self.depth_intrin.ppy],
-                                   [0, 0, 1]])
-            dist = np.zeros(5)
-            retval, rvec, tvec, _ = cv2.solvePnPRansac(list_a, list_b, camera_mat, distCoeffs=dist)
-            rvec, _ = cv2.Rodrigues(rvec)
+            # list_a = np.array(self.camera_coordinate_first, dtype=np.float32).reshape((len(
+            #     self.camera_coordinate_first), 1, 3))
+            # list_b = np.array(self.camera_pixel_second, dtype=np.float32).reshape((len(self.camera_pixel_second),
+            # 1, 2))
+            # camera_mat = np.array([[self.depth_intrin.fx, 0, self.depth_intrin.ppx],
+            #                        [0, self.depth_intrin.fy, self.depth_intrin.ppy],
+            #                        [0, 0, 1]])
+            # dist = np.zeros(5)
+            # retval, rvec, tvec, _ = cv2.solvePnPRansac(list_a, list_b, camera_mat, distCoeffs=dist)
+            # rvec, _ = cv2.Rodrigues(rvec)
+
+            A = np.array(self.camera_coordinate_first, dtype=np.float32)
+            B = np.array(self.camera_coordinate_second, dtype=np.float32)
+            T, distances = icp.icp(B, A, tolerance=1e-6)[:2]
 
             # Use the result above as initial value for further optimize to get delta_x, delta_y and delta_theta
-            x0 = [tvec[0], tvec[2], math.atan2(rvec[0, 2], rvec[0, 0])]
-            self.res = least_squares(self.func, x0, method='lm')
+            # x0 = [tvec[0], tvec[2], math.atan2(rvec[0, 2], rvec[0, 0])]
+            # self.res = least_squares(self.func, x0, method='lm')
             # self.res.x *= 100
 
             # Calculate the displacement matrix
-            temp = np.hstack((rvec, tvec))
-            self.displace_mat = np.vstack((temp, [0, 0, 0, 1]))
+            # temp = np.hstack((rvec, tvec))
+            # self.displace_mat = np.vstack((temp, [0, 0, 0, 1]))
+            self.displace_mat = T
         else:
             pso_ORBDetector = PSO(population_size=10, max_steps=50, pA=self.camera_coordinate_first, pB=self.listB)
             self.optimized_result = pso_ORBDetector.evolve()
