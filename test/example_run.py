@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import os
-from ORB_VO.main import ORBDetector
+from main import ORBDetector
 import matplotlib.pyplot as plt
 
 IS_CAMERA_CONNECTED = False
@@ -82,7 +82,7 @@ if __name__ == "__main__":
             orb_detector.match_features()
             i += 1
 
-        if orb_detector.match.__len__() != 0:
+        if orb_detector.match.__len__():
             orb_detector.find_inlier_without_depth()
 
             # The acquirement of depth_scale and depth_intrin is by debugging main.py

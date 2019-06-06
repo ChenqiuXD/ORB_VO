@@ -1,9 +1,10 @@
+# -*- coding:utf-8 -*-
 import numpy as np
 import pyrealsense2 as rs
 import cv2
 from math import sin, cos
 import math
-from ORB_VO.pso import PSO
+from pso import PSO
 from scipy.optimize import least_squares
 
 USE_LM = True
@@ -86,8 +87,7 @@ class ORBDetector:
     def match_features(self):
         """This method match the features using BrutalForce and sort them by similarity
          and only take the strongest 50"""
-        type_of_None = type(None)
-        if type(self.featureDes_first) != type_of_None and type(self.featureDes_second) != type_of_None:
+        if self.featureDes_first is not None and self.featureDes_second is not None:
             # IMPORTANT : match(queryDescriptors, trainDescriptors)
             matches = self.bfMatcher.match(self.featureDes_first, self.featureDes_second)
             self.match = sorted(matches, key=lambda x: x.distance)
@@ -97,8 +97,7 @@ class ORBDetector:
 
     def find_most_compatible_match(self, candidate):
         """This method loop through candidate to find matches which has most compatible number"""
-        best_matchIdx = -1
-        best_matchVal = 0
+        best_matchIdx = best_matchVal = None
         len_of_match = len(self.match)
         if not candidate.any():
             return None
@@ -295,5 +294,5 @@ class ORBDetector:
         #     ORBDetector.pp[:2] += tm.dot(self.optimized_result[1:3])
 
         ORBDetector.tm = np.dot(ORBDetector.tm, self.displace_mat)
-        ORBDetector.pp = np.array([ORBDetector.tm[0, 3], ORBDetector.tm[2, 3], math.atan2(ORBDetector.tm[1, 0],
-                                                                                          ORBDetector.tm[0, 0])])
+        ORBDetector.pp = np.array([ORBDetector.tm[0, 3], ORBDetector.tm[2, 3], math.atan2(
+            ORBDetector.tm[1, 0], ORBDetector.tm[0, 0])])
