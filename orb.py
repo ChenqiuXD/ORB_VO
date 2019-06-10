@@ -1,4 +1,4 @@
-# -*- coding:utf-8 -*-
+# encoding: UTF-8
 import numpy as np
 import pyrealsense2 as rs
 import cv2

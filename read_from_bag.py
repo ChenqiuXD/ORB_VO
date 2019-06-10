@@ -1,7 +1,7 @@
 import cv2
 import pyrealsense2 as rs
 import numpy as np
-from ORB_VO.orb import ORBDetector
+from orb import ORBDetector
 
 USE_LM = True
 BAG_NAME = '20190603_092006.bag'
@@ -84,7 +84,6 @@ if __name__ == "__main__":
                 print(str(iterCount) + ' ' + result)
                 f.write(result)
                 f.write("\n")
-
 
         # Draw the features on the image for debugging
         if iterCount != 0:
