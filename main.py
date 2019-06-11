@@ -3,7 +3,7 @@
 import numpy as np
 import cv2
 import pyrealsense2 as rs
-from ORB_VO.orb import ORBDetector
+from orb import ORBDetector
 
 THRESHHOLD = 30
 FEATUREMAX = 200
