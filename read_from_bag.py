@@ -4,7 +4,7 @@ import numpy as np
 from orb import ORBDetector
 
 USE_LM = True
-BAG_NAME = '20190603_092006.bag'
+BAG_NAME = '2.bag'
 MAX_DIS = 4
 MIN_DIS = 0.5
 GAP = 5
@@ -67,7 +67,7 @@ if __name__ == "__main__":
             # Optimize to calculate the transition matrix
             orb_detector.calculate_camera_coordinates()
             if len(orb_detector.camera_coordinate_first) >= 3:
-                orb_detector.optimize()
+                orb_detector.optimize_ransac()
                 orb_detector.get_new_pp()
                 # print(iterCount, ORBDetector.pp)
                 if USE_LM:
@@ -100,7 +100,7 @@ if __name__ == "__main__":
                     cv2.putText(image, text, (40, 50 + 20 * i), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 255), 2)
             cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('RealSense', image)
-            cv2.waitKey(0)
+            cv2.waitKey(1)
 
         # Update the iterCount
         if iterCount <= 10000:
