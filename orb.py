@@ -261,9 +261,9 @@ class ORBDetector:
         for cord in cord_list:
             result.append(cord[1][0] - (cos(x[2])*cord[0][0] + sin(x[2])*cord[0][2] + x[0]))
             result.append(cord[1][2] - (-sin(x[2])*cord[0][0] + cos(x[2])*cord[0][2] + x[1]))
-        if is_lm:
+        if is_lm:  # return errors for all coordinates and points for the call of least_squares.
             return np.array(result)
-        else:
+        else:  # get the maximum absolute error on all coordinates
             return np.max(np.fabs(result))
 
     def optimize(self):
@@ -301,8 +301,8 @@ class ORBDetector:
 
     def optimize_ransac(self):
         """
-
-        :return:
+        use lm (a sort of least squares) inside ransac each loop to solve the problem of outliers in matches.
+        :return: The best position-posture variable: np.array([x, z, \theta])
         """
         # pre-process:
         cord_list_a = copy.deepcopy(self.camera_coordinate_first)
