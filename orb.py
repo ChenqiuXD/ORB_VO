@@ -7,6 +7,7 @@ import math
 from pso import PSO
 import icp.icp as icp
 from scipy.optimize import least_squares
+from scipy.linalg import expm, norm
 import copy
 import random
 
@@ -256,11 +257,45 @@ class ORBDetector:
         return np.asarray(result)
 
     @staticmethod
-    def ransac_cost_func(x, cord_list=None, is_lm=False):
+    def rotate_matrix(axis, radian):
+        return expm(np.cross(np.eye(3), axis / norm(axis) * radian))
+
+    @staticmethod
+    def getT(pp, three_d=False):
+        if three_d:  # 3d, pp = np.array([<x>, <y>, <z>, <theta_x>, <theta_y>, <theta_z>]
+            T = ORBDetector.rotate_matrix(np.array([0, 0, 1]), pp[5]).dot(ORBDetector.rotate_matrix(np.array([0, 1,
+                                                                                                              0]),
+                                                                                                    pp[4])).dot(
+                ORBDetector.rotate_matrix(np.array([1, 0, 0]), pp[3]))
+            T = np.vstack((np.hstack((T, pp[:3])), [0, 0, 0, 1]))
+            return T
+        else:  # 2d, pp = np.array([<x>, <z>, <theta>])
+            return np.array([[cos(pp[2]), 0, sin(pp[2]), pp[0]],
+                             [0, 1, 0, 0],
+                             [-sin(pp[2]), 0, cos(pp[2]), pp[1]],
+                             [0, 0, 0, 1]])
+
+    @staticmethod
+    def ransac_residual_func(x, cord_list=None, is_lm=False, three_d=False):
+        """
+        calculate the 3-dimensional residuals for a given model parameters x.
+        If is_lm is True, this can be used in LM Least Squared method.
+        :param x: np.array([<x>, <y>, <z>, <theta_x>, <theta_y>, <theta_z>]
+        :param cord_list: a list of tuples of cords.
+        :param is_lm: bool.
+        :param three_d: bool.
+        :return: residuals. If is_lm is true, it is an array of residuals.
+        """
         result = []
         for cord in cord_list:
-            result.append(cord[1][0] - (cos(x[2])*cord[0][0] + sin(x[2])*cord[0][2] + x[0]))
-            result.append(cord[1][2] - (-sin(x[2])*cord[0][0] + cos(x[2])*cord[0][2] + x[1]))
+            if three_d:
+                result.extend(ORBDetector.getT(x, three_d=True).dot(cord[1]) - cord[0])
+            else:
+                result.extend([cord[0][0] - (cos(x[2])*cord[1][0] + sin(x[2])*cord[1][2] + x[0]),
+                               cord[0][2] - (-sin(x[2])*cord[1][0] + cos(x[2])*cord[1][2] + x[1])])
+                # result.append(cord[1][0] - (cos(x[2])*cord[0][0] + sin(x[2])*cord[0][2] + x[0]))
+                # result.append(cord[1][2] - (-sin(x[2])*cord[0][0] + cos(x[2])*cord[0][2] + x[1]))
+
         if is_lm:  # return errors for all coordinates and points for the call of least_squares.
             return np.array(result)
         else:  # get the maximum absolute error on all coordinates
@@ -299,7 +334,7 @@ class ORBDetector:
             self.optimized_result = pso_ORBDetector.evolve()
             self.optimized_result[1:3] = 100 * self.optimized_result[1:3]
 
-    def optimize_ransac(self):
+    def optimize_ransac(self, three_d=False):
         """
         use lm (a sort of least squares) inside ransac each loop to solve the problem of outliers in matches.
         :return: The best position-posture variable: np.array([x, z, \theta])
@@ -307,16 +342,19 @@ class ORBDetector:
         # pre-process:
         cord_list_a = copy.deepcopy(self.camera_coordinate_first)
         cord_list_b = copy.deepcopy(self.camera_coordinate_second)
-        cord_list = map(list, tuple(zip(cord_list_a, cord_list_b)))
+        cord_list = list(map(list, tuple(zip(cord_list_a, cord_list_b))))
         all_cord_indices = list(range(len(cord_list)))
-        for pair in cord_list:
+        for pair in cord_list:  # Convert the coordinates from a list to a numpy array object
             pair[0] = np.array(pair[0])
             pair[1] = np.array(pair[1])
         """
+        After convertion:
         cord_list: [[array(), array()], [array(), array()], ...]
         """
         # hyper-parameters:
-        min_points = 3
+        min_points = 20  # I think more points will add the possibility to obtain a good model.
+        if min_points > len(cord_list):
+            min_points = len(cord_list) - 1
         max_iteration = 100
         threshold = 1e-2
         # min_number_to_assert = 0.8*len(cord_list)
@@ -331,27 +369,26 @@ class ORBDetector:
             other_indices = list(set(all_cord_indices)-set(maybe_inliers_indices))
             other_cord_list = [cord_list[i] for i in other_indices]
             maybe_inliers = [cord_list[i] for i in maybe_inliers_indices]
-            pp = least_squares(self.ransac_cost_func, np.array([0, 0, 0]), method='lm',
-                               kwargs={'cord_list': maybe_inliers, 'is_lm': True}).x
+            pp = least_squares(self.ransac_residual_func, np.array([0, 0, 0]), method='lm',
+                               kwargs={'cord_list': maybe_inliers, 'is_lm': True, 'three_d': three_d}).x
             also_inliers = []
 
             for sample in other_cord_list:
-                err = self.ransac_cost_func(pp, cord_list=[sample], is_lm=False)
+                err = self.ransac_residual_func(pp, cord_list=[sample], is_lm=False, three_d=three_d)
                 if np.fabs(err) < threshold:
                     also_inliers.append(sample)
             if len(also_inliers) > min_number_to_assert:
-                better_pp = least_squares(self.ransac_cost_func, np.array([0, 0, 0]), method='lm',
-                                          kwargs={'cord_list': maybe_inliers+also_inliers, 'is_lm': True}).x
-                this_err = self.ransac_cost_func(better_pp, cord_list=cord_list, is_lm=False)
+                better_pp = least_squares(self.ransac_residual_func, np.array([0, 0, 0]), method='lm',
+                                          kwargs={'cord_list': maybe_inliers+also_inliers, 'is_lm': True, 'three_d':
+                                              three_d}).x
+                this_err = self.ransac_residual_func(better_pp, cord_list=cord_list, is_lm=False, three_d=three_d)
                 if this_err < best_err:
                     best_pp = better_pp
                     best_err = this_err
 
             iteration += 1
-        self.displace_mat = np.array([[cos(best_pp[2]), 0, sin(best_pp[2]), best_pp[0]],
-                                      [0, 1, 0, 0],
-                                      [-sin(best_pp[2]), 0, cos(best_pp[2]), best_pp[1]],
-                                      [0, 0, 0, 1]])
+
+        self.displace_mat = ORBDetector.getT(best_pp, three_d=three_d)
         return best_pp
 
     def get_new_pp(self):
