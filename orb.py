@@ -10,7 +10,7 @@ from scipy.optimize import least_squares
 from scipy.linalg import expm, norm
 import copy
 import random
-import time
+# import time
 
 USE_LM = True
 THRESHHOLD = 30
@@ -246,7 +246,6 @@ class ORBDetector:
                 depth1 = self.second_depth_frame.get_distance(img_pixel1_[0], img_pixel1_[1])
                 depth2 = self.second_depth_frame.get_distance(img_pixel2_[0], img_pixel2_[1])
                 wc_ = depth1 - depth2
-                # Todo: based on the three dimension imformation
 
                 # Compare and complete the matrix W
                 if abs(wa - wa_) + abs(wb - wb_) + abs(wc - wc_) <= self.INLIER_DIST_THRE:
@@ -543,4 +542,4 @@ class ORBDetector:
 
         ORBDetector.tm = np.dot(ORBDetector.tm, self.displace_mat)
         ORBDetector.pp = np.array([ORBDetector.tm[0, 3], ORBDetector.tm[2, 3], math.atan2(
-            ORBDetector.tm[1, 0], ORBDetector.tm[0, 0])])
+            ORBDetector.tm[0, 2], ORBDetector.tm[2, 2])])

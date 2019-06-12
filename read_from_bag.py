@@ -2,14 +2,15 @@ import cv2
 import pyrealsense2 as rs
 import numpy as np
 from orb import ORBDetector
+import math
 
 USE_LM = True
 BAG_NAME = '20190612_093033.bag'
 MAX_DIS = 4
 MIN_DIS = 0.5
-GAP = 1
-PLOT_TRAJECTORY = False
-MAX_ITER = 1000
+GAP = 5
+PLOT_TRAJECTORY = True
+MAX_ITER = 10000
 
 if __name__ == "__main__":
     file_path = 'bag/' + BAG_NAME
@@ -99,15 +100,19 @@ if __name__ == "__main__":
                 for i in range(4):
                     text = str(orb_detector.displace_mat[i, :])
                     cv2.putText(image, text, (40, 50 + 20 * i), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 255), 2)
+
+            cv2.putText(image, str([ORBDetector.pp[0], ORBDetector.pp[1], round(ORBDetector.pp[2]/math.pi*180)]), (40,
+                                                                                                                   130),
+                        cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 255), 2)
+
             cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('RealSense', image)
-            cv2.waitKey(1)
+            cv2.waitKey(200)
 
         # Update the iterCount
         if iterCount <= 10000:
             iterCount += 1
         orb_detector.best_matches = []
-
 
         # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
         # cv2.imshow('RealSense', depth_image)
