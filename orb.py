@@ -510,16 +510,16 @@ class ORBDetector:
                 if np.fabs(err) < threshold:
                     also_inliers.append(sample)
 
-            if len(also_inliers) > min_number_to_assert:
+            if len(also_inliers+maybe_inliers) > min_number_to_assert:
                 best_pp = pp
                 break
             else:
-                candidate_pp = least_squares(self.ransac_residual_func, x0, method='lm',
-                                             kwargs={'cord_list': maybe_inliers+also_inliers, 'is_lm': True,
-                                                     'three_d': three_d}).x
-                this_err = self.ransac_residual_func(candidate_pp, cord_list=cord_list, is_lm=False, three_d=three_d)
+                # candidate_pp = least_squares(self.ransac_residual_func, x0, method='lm',
+                #                              kwargs={'cord_list': maybe_inliers+also_inliers, 'is_lm': True,
+                #                                      'three_d': three_d}).x
+                this_err = self.ransac_residual_func(pp, cord_list=cord_list, is_lm=False, three_d=three_d)
                 if this_err < best_err:
-                    best_pp = candidate_pp
+                    best_pp = pp
                     best_err = this_err
             # print(best_err)
             iteration += 1
