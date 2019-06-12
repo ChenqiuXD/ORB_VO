@@ -10,12 +10,13 @@ MIN_DIS = 0.2
 INLIER_THRE = 0.5
 GAP = 3
 PLOT_TRAJECTORY = True
-MAX_ITER = 10000
+MAX_ITER = 15000
 WAIT_KEY = 2
 PRINT_DELTA = False
+USE_RANSAC = True
 
 if __name__ == "__main__":
-    file_path = 'bag/' + BAG_NAME
+    file_path = 'D:/vo/ORB_VO-pp/bag/' + BAG_NAME
 
     p = rs.pipeline()
     cfg = rs.config()
@@ -70,7 +71,7 @@ if __name__ == "__main__":
             orb_detector.reset_frame(color_frame_next=color_frame,depth_frame_next=second_depth_frame)
 
             orb_detector.match_features()
-            orb_detector.calculate_camera_coordinates()
+            orb_detector.calculate_camera_coordinates(depth_to_color_extrin=depth_to_color_extrin)
             if orb_detector.match.__len__() != 0:
 
                 # orb_detector.simple_match_filter(threshhold=GAP*0.05)
@@ -83,7 +84,10 @@ if __name__ == "__main__":
 
             # Optimize to calculate the transition matrix
             if len(orb_detector.camera_coordinate_first) >= 3:
-                orb_detector.optimize()
+                if USE_RANSAC:
+                    orb_detector.optimize_ransac(three_d=True)
+                else:
+                    orb_detector.optimize()
                 orb_detector.get_new_pp()
                 # print(iterCount, ORBDetector.pp)
                 if USE_LM:

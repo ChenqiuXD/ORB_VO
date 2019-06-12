@@ -7,6 +7,8 @@ import math
 from pso import PSO
 import icp.icp as icp
 from scipy.optimize import least_squares
+import copy
+import random
 
 USE_LM = True
 THRESHHOLD = 30
@@ -247,7 +249,7 @@ class ORBDetector:
 
 
 
-    def calculate_camera_coordinates(self):
+    def calculate_camera_coordinates(self,depth_to_color_extrin):
         """This method get the list A and B by rs.deproject function"""
         self.camera_coordinate_first = []
         self.camera_coordinate_second = []
@@ -264,7 +266,8 @@ class ORBDetector:
                 # print(depth)
                 continue
             # print(depth)
-            point_a = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel[::-1], depth)
+            depth_point_a = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel[::-1], depth)
+            point_a = rs.rs2_transform_point_to_point(depth_to_color_extrin, depth_point_a)
             point_a_pixel = img_pixel
             # threeD_file.write(str(point_a[1]))
             # threeD_file.write("\n")
@@ -278,7 +281,8 @@ class ORBDetector:
                 continue
             point_b_pixel = img_pixel
             # print(depth)
-            point_b = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel[::-1], depth)
+            depth_point_b = rs.rs2_deproject_pixel_to_point(self.depth_intrin, img_pixel[::-1], depth)
+            point_b = rs.rs2_transform_point_to_point(depth_to_color_extrin, depth_point_b)
             # threeD_file.write(str(point_b[1]))
             # threeD_file.write("\n")
             # point_b = [point_b[0], point_b[2], 1]
@@ -307,7 +311,142 @@ class ORBDetector:
         # print(error)
         return error
 
-        # error =
+    @staticmethod
+    def rotate_matrix(axis, radian):
+        """
+        deprecated for the low efficiency.
+        :param axis: rotation axis
+        :param radian: radian
+        :return: 3-by-3 rotation matrix
+        """
+        return expm(np.cross(np.eye(3), axis / norm(axis) * radian))
+
+    @staticmethod
+    def getT(pp, three_d=False):
+        """
+        get the displace matrix of a given pp (position and posture)
+        :param pp: np.array([<x>, <y>, <z>, <theta_x>, <theta_y>, <theta_z>]
+        :param three_d: bool, whether to calculate 3-d coordinates
+        :return: displace matrix: 4-by-4 ndarray
+        """
+        if three_d:
+            c1 = cos(pp[3])
+            s1 = sin(pp[3])
+            c2 = cos(pp[4])
+            s2 = sin(pp[4])
+            c3 = cos(pp[5])
+            s3 = sin(pp[5])
+
+            return np.array([[c3 * c2, c3 * s2 * s1 - c1 * s3, c3 * s2 * c1 + s3 * s1, pp[0]],
+                             [s3 * c2, s3 * s2 * s1 + c3 * c1, s3 * s2 * c1 - c3 * s1, pp[1]],
+                             [-s2, c2 * s1, c2 * c1, pp[2]],
+                             [0, 0, 0, 1]])
+        else:
+            # return np.array([[cos(pp[2]), 0, sin(pp[2]), pp[0]],
+            #                  [0, 1, 0, 0],
+            #                  [-sin(pp[2]), 0, cos(pp[2]), pp[1]],
+            #                  [0, 0, 0, 1]])
+            return np.array([[cos(pp[2]), -sin(pp[2]), 0, pp[0]],
+                                  [sin(pp[2]), cos(pp[2]), 0, pp[1]],
+                                  [0, 0, 1, 0],
+                                  [0, 0, 0, 1]])
+
+    @staticmethod
+    def ransac_residual_func(x, cord_list=None, is_lm=False, three_d=False):
+        """
+        calculate the 3-dimensional residuals for a given model parameters x.
+        If is_lm is True, this can be used in LM Least Squared method.
+        :param x: np.array([<x>, <y>, <z>, <theta_x>, <theta_y>, <theta_z>]
+        :param cord_list: a list of tuples of cords.
+        :param is_lm: bool.
+        :param three_d: bool.
+        :return: residuals. If is_lm is true, it is an array of residuals.
+        """
+        result = []
+        for cord in cord_list:
+            if three_d:
+                result.extend((ORBDetector.getT(x, three_d=True).dot(np.append(cord[1], 1)) - np.append(cord[0],
+                                                                                                        1))[:3])
+            else:
+                result.extend([cord[0][0] - (cos(x[2]) * cord[1][0] + sin(x[2]) * cord[1][2] + x[0]),
+                               cord[0][2] - (-sin(x[2]) * cord[1][0] + cos(x[2]) * cord[1][2] + x[1])])
+                # result.append(cord[1][0] - (cos(x[2])*cord[0][0] + sin(x[2])*cord[0][2] + x[0]))
+                # result.append(cord[1][2] - (-sin(x[2])*cord[0][0] + cos(x[2])*cord[0][2] + x[1]))
+
+        if is_lm:  # return errors for all coordinates and points for the call of least_squares.
+            return np.array(result)
+        else:  # get the maximum absolute error on all coordinates
+            return np.max(np.fabs(result))
+
+    def optimize_ransac(self, three_d=False):
+        """
+        use lm (a sort of least squares) inside ransac each loop to solve the problem of outliers in matches.
+        :return: The best position-posture variable: np.array([x, z, \theta])
+        """
+        # pre-process:
+        cord_list_a = copy.deepcopy(self.camera_coordinate_first)
+        cord_list_b = copy.deepcopy(self.camera_coordinate_second)
+        cord_list = list(map(list, tuple(zip(cord_list_a, cord_list_b))))
+        all_cord_indices = range(len(cord_list))
+        # for debug:
+        # d_z_list = [cord[1][2]-cord[0][2] for cord in cord_list]
+        for pair in cord_list:  # Convert the coordinates from a list to a numpy array object
+            pair[0] = np.array(pair[0])[[0, 2, 1]]
+            pair[1] = np.array(pair[1])[[0, 2, 1]]
+        """
+        After convertion:
+        cord_list: [[array(), array()], [array(), array()], ...]
+        """
+        # hyper-parameters:
+        min_points = 6  # I think more points will add the possibility to obtain a good model.
+        if min_points > len(cord_list):
+            min_points = len(cord_list) - 1
+        max_iteration = 20
+        threshold = 0.015
+        min_number_to_assert = 0.8 * len(cord_list)
+        # if min_points != 20:
+        #     min_number_to_assert = 0  # If too few matches, just accept it
+        # initialize
+        iteration = 0
+        best_pp = None
+        best_err = float('inf')
+        if three_d:
+            x0 = np.zeros(6)
+        else:
+            x0 = np.zeros(3)
+
+        while iteration < max_iteration:
+            maybe_inliers_indices = random.sample(all_cord_indices, min_points)
+            other_indices = list(set(all_cord_indices) - set(maybe_inliers_indices))
+            other_cord_list = [cord_list[i] for i in other_indices]
+            maybe_inliers = [cord_list[i] for i in maybe_inliers_indices]
+            # Calculate the pp with selected (maybe) inliers
+            pp = least_squares(self.ransac_residual_func, x0, method='lm',
+                               kwargs={'cord_list': maybe_inliers, 'is_lm': True, 'three_d': three_d}).x
+            also_inliers = []
+
+            # From other instances calculate the also inliers (maybe)
+            for sample in other_cord_list:
+                err = self.ransac_residual_func(pp, cord_list=[sample], is_lm=False, three_d=three_d)
+                if np.fabs(err) < threshold:
+                    also_inliers.append(sample)
+
+            if len(also_inliers + maybe_inliers) > min_number_to_assert:
+                best_pp = pp
+                break
+            else:
+                # candidate_pp = least_squares(self.ransac_residual_func, x0, method='lm',
+                #                              kwargs={'cord_list': maybe_inliers+also_inliers, 'is_lm': True,
+                #                                      'three_d': three_d}).x
+                this_err = self.ransac_residual_func(pp, cord_list=cord_list, is_lm=False, three_d=three_d)
+                if this_err < best_err:
+                    best_pp = pp
+                    best_err = this_err
+            # print(best_err)
+            iteration += 1
+
+        self.displace_mat = ORBDetector.getT(best_pp, three_d=three_d)
+        return best_pp
 
     def optimize(self):
         """LM method by scipy"""
