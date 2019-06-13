@@ -308,7 +308,7 @@ class ORBDetector:
                          int(self.featureFrame_first[pair.queryIdx].pt[1])]
             # !!!!!!!!!!!!!!!!!!!!!!!!! CAUTIOUS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
             # The camera coordinate is different from ndarray coordinate from that their x and y axis are reversed
-            depth = self.first_depth_frame.get_distance(img_pixel[1], img_pixel[0])
+            depth = self.first_depth_frame.get_distance(img_pixel[0], img_pixel[1])
             if depth >= self.max_dis or depth <= self.min_dis:
                 # print(depth)
                 continue
@@ -321,7 +321,7 @@ class ORBDetector:
 
             img_pixel = [int(self.featureFrame_second[pair.trainIdx].pt[0]),
                          int(self.featureFrame_second[pair.trainIdx].pt[1])]
-            depth = self.second_depth_frame.get_distance(img_pixel[1], img_pixel[0])
+            depth = self.second_depth_frame.get_distance(img_pixel[0], img_pixel[1])
             if depth >= self.max_dis or depth <= self.min_dis:
                 # print(depth)
                 continue

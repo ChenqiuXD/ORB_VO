@@ -3,12 +3,13 @@ import pyrealsense2 as rs
 import numpy as np
 from orb import ORBDetector
 import math
+from draw_animation import draw_trace
 
 USE_LM = True
 BAG_NAME = '20190612_093033.bag'
 MAX_DIS = 4
 MIN_DIS = 0.5
-GAP = 5
+GAP = 3
 PLOT_TRAJECTORY = True
 MAX_ITER = 10000
 
@@ -69,8 +70,9 @@ if __name__ == "__main__":
             # Optimize to calculate the transition matrix
 
             if len(orb_detector.camera_coordinate_first) >= 3:
-                orb_detector.optimize_ransac(three_d=True)
+                orb_detector.optimize_ransac(three_d=False)
                 orb_detector.get_new_pp()
+                draw_trace(orb_detector.pp)
                 # print(iterCount, ORBDetector.pp)
                 if USE_LM:
                     if not PLOT_TRAJECTORY:
@@ -107,7 +109,7 @@ if __name__ == "__main__":
 
             cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('RealSense', image)
-            cv2.waitKey(200)
+            cv2.waitKey(100)
 
         # Update the iterCount
         if iterCount <= 10000:
