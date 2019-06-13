@@ -18,6 +18,7 @@ INLIER_DIST_THRE = 0.2
 MAX_DIS = 10
 MIN_DIS = 0.2
 FOUR = True
+USE_BLUR = False
 
 def cal_matrix_T(x):
     "x: 6d vector : x , y, z"
@@ -56,7 +57,7 @@ class ORBDetector:
     pp = np.array([0.0, 0.0, 0.0])  # The initial position and posture of the
     tm = np.eye(4)
 
-    def __init__(self, depth_intrin, use_lm=USE_LM, inlier_thre=INLIER_DIST_THRE, max_dis=MAX_DIS, min_dis=MIN_DIS):
+    def __init__(self, depth_intrin, use_lm=USE_LM, inlier_thre=INLIER_DIST_THRE, max_dis=MAX_DIS, min_dis=MIN_DIS,use_blur=USE_BLUR):
         # Every frame has four attribute : color_frame, depth_frame, features, feature_descriptorss.
         self.first_color_frame = []
         self.second_color_frame = []
@@ -70,6 +71,7 @@ class ORBDetector:
         self.depth_intrin = depth_intrin
         self.orb = cv2.ORB_create(nfeatures=FEATUREMAX, fastThreshold=THRESHHOLD)
         self.USE_LM = use_lm
+        self.use_blur = use_blur
         self.INLIER_DIST_THRE = inlier_thre
         self.min_dis =min_dis
         self.max_dis = max_dis
@@ -98,7 +100,10 @@ class ORBDetector:
 
     def set_second_frame(self, color_frame, depth_frame):
         self.second_color_frame = np.asanyarray(color_frame.get_data())
+        if self.use_blur:
+            self.second_color_frame = cv2.blur(self.second_color_frame, (3,3))
         self.second_depth_frame = depth_frame
+
 
     def reset_frame(self, color_frame_next, depth_frame_next):
         """This method is applied after each frame is processed intending for reduce the calculation cost
@@ -109,6 +114,8 @@ class ORBDetector:
         self.first_depth_frame = self.second_depth_frame
 
         self.second_color_frame = np.asanyarray(color_frame_next.get_data())
+        if self.use_blur:
+            self.second_color_frame = cv2.blur(self.second_color_frame, (3, 3))
         self.second_depth_frame = depth_frame_next
         self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
 

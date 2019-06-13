@@ -6,13 +6,14 @@ from draw_animation import draw_trace
 
 USE_LM = True
 BAG_NAME = '5.bag'
-MAX_DIS = 4
+MAX_DIS = 3
 MIN_DIS = 0.2
 INLIER_THRE = 0.5
 GAP = 3
-threshhold_coor = 0.05
+threshhold_coor = 0.1
 threshhold_theta = np.pi/36
 PLOT_TRAJECTORY = True
+USE_BLUR = False
 MAX_ITER = 15000
 WAIT_KEY = 2
 PRINT_DELTA = False
@@ -62,7 +63,7 @@ if __name__ == "__main__":
             color_frame.profile)
 
         if iterCount == 0:
-            orb_detector = ORBDetector(depth_intrin=depth_intrin,use_lm=USE_LM,min_dis=MIN_DIS,max_dis=MAX_DIS,inlier_thre=INLIER_THRE)
+            orb_detector = ORBDetector(depth_intrin=depth_intrin,use_lm=USE_LM,min_dis=MIN_DIS,max_dis=MAX_DIS,inlier_thre=INLIER_THRE,use_blur=USE_BLUR)
             orb_detector.set_second_frame(color_frame=color_frame,depth_frame=second_depth_frame)
             orb_detector.detect_second_features()
             iterCount += 1
