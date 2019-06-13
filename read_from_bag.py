@@ -37,6 +37,7 @@ if __name__ == "__main__":
         frames = p.wait_for_frames()
     f = open('result_new.txt', 'w')
     iterCount = 0
+    INSUFFICIENT_KEY = False
     while iterCount < MAX_ITER:
         # Wait for a coherent pair of frames: depth and color
         frames = p.wait_for_frames()
@@ -68,8 +69,12 @@ if __name__ == "__main__":
             continue
         else:
             # Update a new frame by set_frame()
-            orb_detector.reset_frame(color_frame_next=color_frame,depth_frame_next=second_depth_frame)
-
+            if INSUFFICIENT_KEY:
+                orb_detector.set_second_frame(color_frame=color_frame,depth_frame=second_depth_frame)
+                orb_detector.detect_second_features()
+                INSUFFICIENT_KEY = False
+            else:
+                orb_detector.reset_frame(color_frame_next=color_frame,depth_frame_next=second_depth_frame)
             orb_detector.match_features()
             orb_detector.calculate_camera_coordinates(depth_to_color_extrin=depth_to_color_extrin)
             if orb_detector.match.__len__() != 0:
@@ -77,9 +82,10 @@ if __name__ == "__main__":
                 # orb_detector.simple_match_filter(threshhold=GAP*0.05)
                 orb_detector.find_inlier_3d()
             else:
-                print("初始关键点不足")
+                print("初始关键点不足，reset second frame")
                 orb_detector.match = []
                 orb_detector.best_matches = []
+                INSUFFICIENT_KEY = True
                 continue
 
             # Optimize to calculate the transition matrix
@@ -88,6 +94,12 @@ if __name__ == "__main__":
                     orb_detector.optimize_ransac(three_d=True)
                 else:
                     orb_detector.optimize()
+                judge = orb_detector.check_estimate(threshhold_coord=0.5,threshhold_theta=np.pi/18)
+                if not judge:
+                    orb_detector.match = []
+                    orb_detector.best_matches = []
+                    print("变化过快")
+                    continue
                 orb_detector.get_new_pp()
                 # print(iterCount, ORBDetector.pp)
                 if USE_LM:
@@ -111,9 +123,10 @@ if __name__ == "__main__":
                 f.write("\n")
 
             else:
-                print("关键点不足")
+                print("关键点不足，reset second frame")
                 orb_detector.best_matches = []
                 orb_detector.match = []
+                INSUFFICIENT_KEY = True
                 continue
 
 

@@ -9,6 +9,7 @@ import icp.icp as icp
 from scipy.optimize import least_squares
 import copy
 import random
+from scipy.linalg import expm, norm
 
 USE_LM = True
 THRESHHOLD = 30
@@ -26,7 +27,6 @@ def cal_matrix_T(x):
     s2 = sin(0)
     c3 = cos(0)
     s3 = sin(0)
-
     mat = np.zeros((4,4))
 
     mat[0,0] = (c1 * c3) - (s1 * c2 * s3)
@@ -90,7 +90,7 @@ class ORBDetector:
 
         # self.res is the brief for result, displace_mat is a 4*4 matrix representing the homogeneous transform matrix
         self.res = [0, 0, 0]
-        self.displace_mat = []
+        self.displace_mat = np.eye(4)
 
     def set_first_frame(self, color_frame, depth_frame):
         self.first_color_frame = np.asanyarray(color_frame.get_data())
@@ -246,9 +246,6 @@ class ORBDetector:
             print('过滤后的最远点:'+str(np.sort(np.asanyarray(self.camera_coordinate_first),axis=0)[-1][1]))
             print('过滤后的最近点:'+str(np.sort(np.asanyarray(self.camera_coordinate_first),axis=0)[0][1]))
 
-
-
-
     def calculate_camera_coordinates(self,depth_to_color_extrin):
         """This method get the list A and B by rs.deproject function"""
         self.camera_coordinate_first = []
@@ -292,8 +289,6 @@ class ORBDetector:
             self.camera_pixel_first.append(point_a_pixel)
             self.camera_coordinate_second.append([point_b[0],point_b[2],point_b[1]])
         self.match = match.copy()
-
-
 
     def func(self,result):
         num_points = self.A.shape[0]
@@ -451,50 +446,28 @@ class ORBDetector:
     def optimize(self):
         """LM method by scipy"""
         if self.USE_LM:
-            # Use opencv function solvePnPRansac to get translational and rotational movement
-            # list_a = np.array(self.camera_coordinate_first, dtype=np.float32).reshape((len(
-            #     self.camera_coordinate_first), 1, 3))
-            # list_b = np.array(self.camera_pixel_second, dtype=np.float32).reshape((len(self.camera_pixel_second),
-            # 1, 2))
-            # camera_mat = np.array([[self.depth_intrin.fx, 0, self.depth_intrin.ppx],
-            #                        [0, self.depth_intrin.fy, self.depth_intrin.ppy],
-            #                        [0, 0, 1]])
-            # dist = np.zeros(5)
-            # retval, rvec, tvec, _ = cv2.solvePnPRansac(list_a, list_b, camera_mat, distCoeffs=dist)
-            # rvec, _ = cv2.Rodrigues(rvec)
 
             self.A = np.array(self.camera_coordinate_first, dtype=np.float32)
             self.B = np.array(self.camera_coordinate_second, dtype=np.float32)
             if USE_LM:
-                result = least_squares(self.func,x0=[0,0,0],method='lm').x
-                T = cal_matrix_T(result)
+                self.optimized_result = least_squares(self.func,x0=[0,0,0],method='lm').x
+                T = cal_matrix_T(self.optimized_result)
             else:
                 result,_,_ = icp.icp(A = self.A,B=self.B)
-            # print(result)
 
-            # Use the result above as initial value for further optimize to get delta_x, delta_y and delta_theta
-            # x0 = [tvec[0], tvec[2], math.atan2(rvec[0, 2], rvec[0, 0])]
-            # self.res = least_squares(self.func, x0, method='lm')
-            # self.res.x *= 100
-
-            # Calculate the displacement matrix
-            # temp = np.hstack((rvec, tvec))
-            # self.displace_mat = np.vstack((temp, [0, 0, 0, 1]))
             self.displace_mat = T
 
     def get_new_pp(self):
-        # cam_displace = self.optimized_result[[1, 2, 0]]
-        # if self.USE_LM:
-        #     ORBDetector.pp[2] += self.res.x[2]
-        #     tm = np.array([[np.cos(ORBDetector.pp[2]), -np.sin(ORBDetector.pp[2])],
-        #                    [np.sin(ORBDetector.pp[2]), np.cos(ORBDetector.pp[2])]])
-        #     ORBDetector.pp[:2] += tm.dot(self.res.x[:2])
-        # else:
-        #     ORBDetector.pp[2] += self.optimized_result[0]
-        #     tm = np.array([[np.cos(ORBDetector.pp[2]), -np.sin(ORBDetector.pp[2])],
-        #                    [np.sin(ORBDetector.pp[2]), np.cos(ORBDetector.pp[2])]])
-        #     ORBDetector.pp[:2] += tm.dot(self.optimized_result[1:3])
 
         ORBDetector.tm = np.dot(ORBDetector.tm,self.displace_mat)
         ORBDetector.pp = np.array([ORBDetector.tm[0, 3], ORBDetector.tm[1, 3], math.atan2(
             ORBDetector.tm[0, 1], ORBDetector.tm[1, 1])])
+
+    def check_estimate(self,threshhold_coord,threshhold_theta,):
+        delta_x = self.optimized_result[0]
+        delta_y = self.optimized_result[1]
+        delta_theta = self.optimized_result[2]
+        if abs(delta_x)+abs(delta_y) < threshhold_coord or abs(delta_theta)<threshhold_theta:
+            return False
+
+
