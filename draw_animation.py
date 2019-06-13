@@ -11,7 +11,7 @@ def draw_trace(new_pp):
 
     plt.cla()
     plt.plot(draw_trace.all_pp[:, 0], draw_trace.all_pp[:, 1])
-    plt.show()
+    # plt.show()
     plt.pause(0.001)
 
 
