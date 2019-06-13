@@ -467,7 +467,10 @@ class ORBDetector:
         delta_x = self.optimized_result[0]
         delta_y = self.optimized_result[1]
         delta_theta = self.optimized_result[2]
-        if abs(delta_x)+abs(delta_y) < threshhold_coord or abs(delta_theta)<threshhold_theta:
+        if abs(delta_x)+abs(delta_y) > threshhold_coord or abs(delta_theta) >threshhold_theta:
             return False
+        else:
+            return True
+
 
 

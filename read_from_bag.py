@@ -2,6 +2,7 @@ import cv2
 import pyrealsense2 as rs
 import numpy as np
 from orb import ORBDetector
+from draw_animation import draw_trace
 
 USE_LM = True
 BAG_NAME = '5.bag'
@@ -9,11 +10,13 @@ MAX_DIS = 4
 MIN_DIS = 0.2
 INLIER_THRE = 0.5
 GAP = 3
+threshhold_coor = 0.05
+threshhold_theta = np.pi/36
 PLOT_TRAJECTORY = True
 MAX_ITER = 15000
 WAIT_KEY = 2
 PRINT_DELTA = False
-USE_RANSAC = True
+USE_RANSAC = False
 
 if __name__ == "__main__":
     file_path = 'D:/vo/ORB_VO-pp/bag/' + BAG_NAME
@@ -94,13 +97,14 @@ if __name__ == "__main__":
                     orb_detector.optimize_ransac(three_d=True)
                 else:
                     orb_detector.optimize()
-                judge = orb_detector.check_estimate(threshhold_coord=0.5,threshhold_theta=np.pi/18)
+                judge = orb_detector.check_estimate(threshhold_coord=threshhold_coor,threshhold_theta=threshhold_theta)
                 if not judge:
                     orb_detector.match = []
                     orb_detector.best_matches = []
                     print("变化过快")
                     continue
                 orb_detector.get_new_pp()
+                draw_trace(orb_detector.pp)
                 # print(iterCount, ORBDetector.pp)
                 if USE_LM:
                     if not PLOT_TRAJECTORY:
@@ -151,7 +155,9 @@ if __name__ == "__main__":
                 cv2.putText(image, text2, (40, 50 + 20 * 4), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 255), 2)
             cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('RealSense', image)
-            cv2.waitKey(WAIT_KEY)
+            key=cv2.waitKey(WAIT_KEY)
+            if key ==27:
+                break
             orb_detector.best_matches = []
             iterCount += 1
 
