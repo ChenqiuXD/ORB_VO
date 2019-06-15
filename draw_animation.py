@@ -25,10 +25,8 @@ if __name__ == "__main__":
     plt.plot(x, y)
     for i in range(100):
         plt.cla()
-        # plt.figure(fig.number)
         x = np.append(x, 10+i)
         y = np.sin(x)
         plt.plot(x, y)
         plt.show()
         plt.pause(0.001)
-        # time.sleep(0.01)

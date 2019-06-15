@@ -4,12 +4,12 @@ import pyrealsense2 as rs
 import cv2
 from math import sin, cos
 import math
-from pso import PSO
-import icp.icp as icp
+# from pso import PSO
+# import icp.icp as icp
 from scipy.optimize import least_squares
 import copy
 import random
-from scipy.linalg import expm, norm
+# from scipy.linalg import expm, norm
 
 USE_LM = True
 THRESHHOLD = 30
@@ -18,11 +18,47 @@ INLIER_DIST_THRE = 0.2
 MAX_DIS = 10
 MIN_DIS = 0.2
 FOUR = True
-USE_BLUR = False
 
+WIN_H = 480
+WIN_W = 640
+TILE_H = int(WIN_H/3)
+TILE_W = int(WIN_W/4)
+
+RANSAC_MIN_ERROR = 1
+
+
+def optimize_after():
+    file_path = "result_new.txt"
+    file_path_w = "result_op.txt"
+    f = open(file_path, 'r')
+    f_w = open(file_path_w, 'w')
+    last_pp = []
+    new_pp = []
+    curr_pp = []
+    lines = f.readlines()
+    for i, line in enumerate(lines):
+        if i == 0:
+            curr_data = line.strip().split(' ')
+            curr_pp = [curr_data[1], curr_data[2]]
+            new_data = lines[i+1].strip().split(' ')
+            new_pp = [new_data[1], new_data[2]]
+            f_w.write(line)
+        elif i == len(lines)-1:
+            f_w.write(line)
+        else:
+            last_pp = curr_pp
+            curr_data = new_data
+            curr_pp = new_pp
+            new_data = lines[i+1].strip().split(' ')
+            new_pp = [new_data[1], new_data[2]]
+            curr_pp[0] = (float(last_pp[0]) + float(curr_pp[0]) + float(new_pp[0])) / 3
+            curr_pp[1] = (float(last_pp[1]) + float(curr_pp[1]) + float(new_pp[1])) / 3
+            f_w.write(str(curr_data[0]) + ' ' + str(curr_pp[0]) + ' ' + str(curr_pp[1]) + '\n')
+    f_w.close()
+    f.close()
 
 def cal_matrix_T(x):
-    """x: 6d vector : x , y, z"""
+    "x: 6d vector : x , y, z"
     c1 = cos(x[2])
     s1 = sin(x[2])
     c2 = cos(0)
@@ -47,7 +83,7 @@ def cal_matrix_T(x):
     mat[2, 3] = 0
 
     mat[3, 0] = mat[3, 1] = mat[3, 2] = 0
-    mat[3, 3] =1
+    mat[3, 3] = 1
 
     return mat
 
@@ -56,7 +92,7 @@ class ORBDetector:
     pp = np.array([0.0, 0.0, 0.0])  # The initial position and posture of the
     tm = np.eye(4)
 
-    def __init__(self, depth_intrin, use_lm=USE_LM, inlier_thre=INLIER_DIST_THRE, max_dis=MAX_DIS, min_dis=MIN_DIS,use_blur=USE_BLUR):
+    def __init__(self, depth_intrin, use_lm=USE_LM, inlier_thre=INLIER_DIST_THRE, max_dis=MAX_DIS, min_dis=MIN_DIS):
         # Every frame has four attribute : color_frame, depth_frame, features, feature_descriptorss.
         self.first_color_frame = []
         self.second_color_frame = []
@@ -66,13 +102,14 @@ class ORBDetector:
         self.featureFrame_second = []
         self.featureDes_first = []
         self.featureDes_second = []
+        self.feature_index = []     # This variable stores the number of features in specific img_patch
 
         self.depth_intrin = depth_intrin
-        self.orb = cv2.ORB_create(nfeatures=FEATUREMAX, fastThreshold=THRESHHOLD, nlevels=8, scaleFactor=1.2)
+        self.orb = cv2.ORB_create(nfeatures=FEATUREMAX, fastThreshold=THRESHHOLD,
+                                  nlevels=8, scaleFactor=1.2)
         self.USE_LM = use_lm
-        self.use_blur = use_blur
         self.INLIER_DIST_THRE = inlier_thre
-        self.min_dis =min_dis
+        self.min_dis = min_dis
         self.max_dis = max_dis
         self.score = []
         self.bfMatcher = cv2.BFMatcher_create(normType=cv2.NORM_HAMMING, crossCheck=True)
@@ -100,8 +137,7 @@ class ORBDetector:
 
     def set_second_frame(self, color_frame, depth_frame):
         self.second_color_frame = np.asanyarray(color_frame.get_data())
-        if self.use_blur:
-            self.second_color_frame = cv2.blur(self.second_color_frame, (3,3))
+        self.second_color_frame = cv2.blur(self.second_color_frame, (3,3))
         self.second_depth_frame = depth_frame
 
     def reset_frame(self, color_frame_next, depth_frame_next):
@@ -113,10 +149,10 @@ class ORBDetector:
         self.first_depth_frame = self.second_depth_frame
 
         self.second_color_frame = np.asanyarray(color_frame_next.get_data())
-        if self.use_blur:
-            self.second_color_frame = cv2.blur(self.second_color_frame, (3, 3))
+        self.second_color_frame = cv2.blur(self.second_color_frame, (3,3))
         self.second_depth_frame = depth_frame_next
-        self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
+        # self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
+        self.detect_second_features()
 
     def detect_all_features(self):
         """For debugging in test.py, would not be called in read_from_bag or example_run"""
@@ -127,19 +163,59 @@ class ORBDetector:
         """Detect features and calculate the descriptors"""
         # P.S. the features and descriptors of frame A are calculated beforehand
         # self.featureFrame_first, self.featureDes_first = self.orb.detectAndCompute(self.first_color_frame, None)
-        self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
+        # self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
+        kp = []
+        index = 0
+        self.featureFrame_second = []
+        self.featureDes_second = []
+        for y in range(0, WIN_H, TILE_H):
+            for x in range(0, WIN_W, TILE_W):
+                img_patch = self.second_color_frame[y:y+TILE_H, x:x+TILE_W]
+                keypoints = self.orb.detect(img_patch)
+
+                if len(keypoints) > 15:
+                    keypoints = sorted(keypoints, key=lambda x: -x.response)
+                    kpts = keypoints[0:15]
+                else:
+                    kpts = keypoints
+
+                kpts, des = self.orb.compute(img_patch, kpts)
+                for pt in kpts:
+                    pt.pt = (pt.pt[0] + x, pt.pt[1] + y)
+                if des is not None:
+                    for i in range(len(des)):
+                        self.featureDes_second.append(des[i])
+                        self.featureFrame_second.append(kpts[i])
+                    index += len(des)
+                    self.feature_index.append(index)
+        # self.featureFrame_second, self.featureDes_second = self.orb.compute(self.second_color_frame, kp)
+        self.featureDes_second = np.array(self.featureDes_second)
 
     def match_features(self):
         """This method match the features using BrutalForce and sort them by similarity
          and only take the strongest 50"""
         if self.featureDes_first is not None and self.featureDes_second is not None:
             # IMPORTANT : match(queryDescriptors, trainDescriptors)
+            # matches = []
+            # for i in range(len(self.feature_index)):
+            #     if i == 0:
+            #         match = self.bfMatcher.match(np.array(self.featureDes_first[:self.feature_index[i]]),
+            #                                      np.array(self.featureDes_second[:self.feature_index[i]]))
+            #     else:
+            #         match = self.bfMatcher.match(np.array(self.featureDes_first[self.feature_index[i-1]:self.feature_index[i]]),
+            #                                      np.array(self.featureDes_second[self.feature_index[i-1]:self.feature_index[i]]))
+            #     for match_ in match:
+            #         if i == 0:
+            #             matches.append(match_)
+            #         else:
+            #             match_.queryIdx += self.feature_index[i-1]
+            #             match_.trainIdx += self.feature_index[i-1]
+            #             matches.append(match_)
             matches = self.bfMatcher.match(self.featureDes_first, self.featureDes_second)
             self.match = sorted(matches, key=lambda x: x.distance)
-            self.match = self.match[:50]
+            # self.match = self.match[:100]
         else:
             self.match = []
-
 
     def calc_w(self):
         len_of_matches = len(self.match)
@@ -440,31 +516,47 @@ class ORBDetector:
     def optimize(self):
         """LM method by scipy"""
         if self.USE_LM:
-
             self.A = np.array(self.camera_coordinate_first, dtype=np.float32)
             self.B = np.array(self.camera_coordinate_second, dtype=np.float32)
             if USE_LM:
-                self.optimized_result = least_squares(self.func,x0=[0,0,0],method='lm').x
+                self.optimized_result = least_squares(self.func, x0=[0,0,0], method='lm').x
                 T = cal_matrix_T(self.optimized_result)
-            else:
-                result,_,_ = icp.icp(A = self.A,B=self.B)
-
             self.displace_mat = T
 
-    def get_new_pp(self):
+    def optimize_ransac2(self):
+        ransac_error = float('inf')
+        d_out = None
+        ransac_size = 6
+        for ransac_itr in range(100):
+            sampled_points = np.random.randint(0, len(self.camera_coordinate_first), ransac_size)
+            self.A = []
+            self.B = []
+            for i in sampled_points:
+                self.A.append(self.camera_coordinate_first[i])
+                self.B.append(self.camera_coordinate_second[i])
+            self.A = np.array(self.A, dtype=np.float32)
+            self.B = np.array(self.B, dtype=np.float32)
+            result = least_squares(self.func, x0=[0, 0, 0], method='lm')
+            error = result.cost
+            if error < ransac_error:
+                ransac_error = error
+                d_out = result.x
+            if ransac_error < RANSAC_MIN_ERROR:
+                break
+        T = cal_matrix_T(d_out)
+        self.displace_mat = T
 
+    def get_new_pp(self):
         ORBDetector.tm = np.dot(ORBDetector.tm,self.displace_mat)
         ORBDetector.pp = np.array([ORBDetector.tm[0, 3], ORBDetector.tm[1, 3], math.atan2(
             ORBDetector.tm[0, 1], ORBDetector.tm[1, 1])])
 
-    def check_estimate(self,threshhold_coord,threshhold_theta,):
+    def check_estimate(self, threshhold_coord, threshhold_theta):
         delta_x = self.optimized_result[0]
         delta_y = self.optimized_result[1]
         delta_theta = self.optimized_result[2]
-        if abs(delta_x) > threshhold_coord or abs(delta_y) > threshhold_coord or abs(delta_theta) > threshhold_theta:
+        if abs(delta_x)>threshhold_coord or abs(delta_y) > threshhold_coord or\
+                abs(delta_theta) > threshhold_theta:
             return False
         else:
             return True
-
-
-
