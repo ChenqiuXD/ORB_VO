@@ -57,6 +57,7 @@ def optimize_after():
     f_w.close()
     f.close()
 
+
 def cal_matrix_T(x):
     "x: 6d vector : x , y, z"
     c1 = cos(x[2])
@@ -124,12 +125,14 @@ class ORBDetector:
         self.camera_coordinate_second = []
         self.camera_pixel_second = []
         self.camera_pixel_first = []
-        self.A = self.B = None
-        self.optimized_result = None
 
         # self.res is the brief for result, displace_mat is a 4*4 matrix representing the homogeneous transform matrix
         self.res = [0, 0, 0]
         self.displace_mat = np.eye(4)
+
+        self.A = self.B = None
+        self.optimized_result = None
+        self.index_result = None
 
     def set_first_frame(self, color_frame, depth_frame):
         self.first_color_frame = np.asanyarray(color_frame.get_data())
@@ -328,7 +331,7 @@ class ORBDetector:
             print('过滤后的最远点:'+str(np.sort(np.asanyarray(self.camera_coordinate_first),axis=0)[-1][1]))
             print('过滤后的最近点:'+str(np.sort(np.asanyarray(self.camera_coordinate_first),axis=0)[0][1]))
 
-    def calculate_camera_coordinates(self,depth_to_color_extrin):
+    def calculate_camera_coordinates(self, depth_to_color_extrin):
         """This method get the list A and B by rs.deproject function"""
         self.camera_coordinate_first = []
         self.camera_coordinate_second = []
@@ -388,20 +391,21 @@ class ORBDetector:
         # print(error)
         return error
 
-    @staticmethod
-    def rotate_matrix(axis, radian):
-        """
-        this function is deprecated for the low efficiency.
-        :param axis: rotation axis
-        :param radian: radian
-        :return: 3-by-3 rotation matrix
-        """
-        return expm(np.cross(np.eye(3), axis / norm(axis) * radian))
+    # @staticmethod
+    # def rotate_matrix(axis, radian):
+    #     """
+    #     this function is deprecated for the low efficiency.
+    #     :param axis: rotation axis
+    #     :param radian: radian
+    #     :return: 3-by-3 rotation matrix
+    #     """
+    #     return expm(np.cross(np.eye(3), axis / norm(axis) * radian))
 
     @staticmethod
     def getT(pp, three_d=False):
         """
         get the displace matrix of a given pp (position and posture)
+        warning: this matrix can only be used when the coordinates y and z are reversed (for 2-d situations)
         :param pp: np.array([<x>, <y>, <z>, <theta_x>, <theta_y>, <theta_z>]
         :param three_d: bool, whether to calculate 3-d coordinates
         :return: displace matrix: 4-by-4 ndarray
@@ -436,18 +440,36 @@ class ORBDetector:
         :return: residuals. If is_lm is true, it is an array of residuals.
         """
         result = []
-        for cord in cords:
-            if three_d:
-                result.extend((ORBDetector.getT(x, three_d=True).dot(np.append(cord[3:], 1)) - np.append(cord[:3],
-                                                                                                         1))[:3])
-            else:
-                result.extend([cord[0] - (cos(x[2]) * cord[3] + sin(x[2]) * cord[5] + x[0]),
-                               cord[2] - (-sin(x[2]) * cord[3] + cos(x[2]) * cord[5] + x[1])])
-
-        if is_lm:  # return errors for all coordinates and points for the call of least_squares.
+        if is_lm:
+            for cord in cords:
+                if three_d:
+                    result.extend((ORBDetector.getT(x, three_d=True).dot(np.append(cord[3:], 1)) - np.append(cord[:3],
+                                                                                                             1))[:3])
+                else:
+                    result.extend([(cord[0] - (cos(x[2]) * cord[3] - sin(x[2]) * cord[5] + x[0])),
+                                   (cord[2] - (sin(x[2]) * cord[3] + cos(x[2]) * cord[5] + x[1]))])
+                """
+                np.array([[c, 0, -s, d_x],
+                          [0, 1, 0,  d_y],
+                          [s, 0, c,  d_z],
+                          [0, 0, 0,    1]])
+                this might be different from right-hand axes, but here we consider x --> new_x, z --> new_y (2-d 
+                situation), which equals:
+                    np.array([[c, -s, d_x],
+                              [s, c,  d_y],
+                              [0, 0,    1]])
+                """
             return np.array(result)
-        else:  # get the maximum absolute error on all coordinates
-            return np.max(np.fabs(result))
+        else:
+            for cord in cords:
+                if three_d:
+                    # TODO: add relative error to three_d.
+                    result.extend((ORBDetector.getT(x, three_d=True).dot(np.append(cord[3:], 1)) - np.append(cord[:3],
+                                                                                                             1))[:3])
+                else:
+                    result.extend([(cord[0] - (cos(x[2]) * cord[3] - sin(x[2]) * cord[5] + x[0]))/cord[0],
+                                   (cord[2] - (sin(x[2]) * cord[3] + cos(x[2]) * cord[5] + x[1]))/cord[2]])
+            return 0.5*np.sum(np.square(result))  # squares of relative error
 
     def optimize_ransac(self, three_d=False):
         """
@@ -466,14 +488,14 @@ class ORBDetector:
         # hyper-parameters:
         min_points = 4  # 4 points is enough to derive a unique model.
         if min_points > len(cords):
-            print("Not enough model to derive a precise model")
-            # TODO: cater to the wider scope
+            print("Not enough model to derive a precise model")  # possible risk of wrong calculated pp
         max_iteration = 15
-        threshold = 0.015
-        min_number_to_assert = 0.9 * len(cords)
+        threshold = 5e-5
+        min_number_to_assert = int(0.7 * len(cords))
         iteration = 0
         best_pp = None
-        best_err = float('inf')
+        # best_err = float('inf')
+        best_num = 0
 
         x0 = np.zeros(3) if not three_d else np.zeros(6)
         while iteration < max_iteration:
@@ -482,7 +504,8 @@ class ORBDetector:
             other_indices = all_cord_indices[min_points:]
             maybe_inliers = cords[maybe_inliers_indices]
             other_cords = cords[other_indices]
-            also_inliers = np.array([])
+            # also_inliers = np.array([])
+            num_also_inliers = 0
             # Calculate the pp with selected (maybe) inliers
             pp = least_squares(self.ransac_residual_func, x0, method='lm',
                                kwargs={'cords': maybe_inliers, 'is_lm': True, 'three_d': three_d}).x
@@ -491,19 +514,23 @@ class ORBDetector:
             for sample in other_cords:
                 err = self.ransac_residual_func(pp, sample.reshape(1, 6), is_lm=False, three_d=three_d)
                 if np.fabs(err) < threshold:
-                    if not len(also_inliers):
-                        also_inliers = sample
-                    else:
-                        np.vstack((also_inliers, sample))
+                    num_also_inliers += 1
+                    # if also_inliers.size == 0:
+                    #     also_inliers = sample.reshape(1, 6)
+                    # else:
+                    #     also_inliers = np.vstack((also_inliers, sample))
 
-            if len(also_inliers) + min_points > min_number_to_assert:
+            # if also_inliers.shape[0] + min_points >= min_number_to_assert:
+            if num_also_inliers + min_points >= min_number_to_assert:
                 best_pp = pp
+                print("assert.")
                 break
             else:
-                this_err = self.ransac_residual_func(pp, cords=cords, is_lm=False, three_d=three_d)
-                if this_err < best_err:
+                # this_err = self.ransac_residual_func(pp, cords=cords, is_lm=False, three_d=three_d)
+                this_num = num_also_inliers
+                if this_num > best_num:
                     best_pp = pp
-                    best_err = this_err
+                    best_num = this_num
             # print(best_err)
             iteration += 1
 
@@ -547,14 +574,13 @@ class ORBDetector:
     def get_new_pp(self):
         ORBDetector.tm = np.dot(ORBDetector.tm, self.displace_mat)
         ORBDetector.pp = np.array([ORBDetector.tm[0, 3], ORBDetector.tm[1, 3], math.atan2(
-            ORBDetector.tm[0, 1], ORBDetector.tm[1, 1])])
+            -ORBDetector.tm[0, 1], ORBDetector.tm[1, 1])])
 
     def check_estimate(self, threshhold_coord, threshhold_theta):
         delta_x = self.optimized_result[0]
         delta_y = self.optimized_result[1]
         delta_theta = self.optimized_result[2]
-        if abs(delta_x)>threshhold_coord or abs(delta_y) > threshhold_coord or\
-                abs(delta_theta) > threshhold_theta:
+        if abs(delta_x) > threshhold_coord or abs(delta_y) > threshhold_coord or abs(delta_theta) > threshhold_theta:
             return False
         else:
             return True

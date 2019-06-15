@@ -97,7 +97,7 @@ def main():
                 else:
                     orb_detector.optimize()
 
-                # Check the extimated motion
+                # Check the estimated motion
                 judge = orb_detector.check_estimate(threshhold_coord=threshhold_coord,
                                                     threshhold_theta=threshhold_theta)
                 if not judge:   # When it is not passed

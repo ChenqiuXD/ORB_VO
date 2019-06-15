@@ -40,44 +40,70 @@ def getT(pp, three_d=False):
                          [0, 0, 0, 1]])
 
 
-if __name__ == "__main__":
-    three_d = True
-    pp = np.array([1, 2, 3, math.pi/2, math.pi/4, math.pi/6])
-    T = ORBDetector.getT(pp, three_d)
+def main():
+    global count
+    orb_detector = ORBDetector(None, None)
+    pp = np.array([1, 2, math.pi/6])
+    T = ORBDetector.getT(pp, three_d=False)
 
     p_b = np.array([[1, 2, 3, 1],
-                    [2, 4, 3, 1],
+                    [2, 3, 3, 1],
                     [1, 4, 3, 1],
-                    [5, 6, 7, 1],
-                    [3, 4, 5, 1],
-                    [1, 0, 0, 1]]).astype(float)
+                    [5, 5, 3, 1],
+                    [3, 6, 3, 1],
+                    [1, 7, 3, 1],
+                    [0, 8, 3, 1],
+                    [5, 9, 3, 1]]).astype(float)
     p_a = p_b.dot(T.T)
+    p_b = np.vstack((p_b, np.hstack((np.random.rand(3, 3), np.ones(3).reshape(3, 1)))))
+    p_a = np.vstack((p_a, np.hstack((np.random.rand(3, 3), np.ones(3).reshape(3, 1)))))
     # add some noise:
-    p_a[:, :3] += np.random.randn(6, 3) * 0.1
-    p_b[:, :3] += np.random.randn(6, 3)*0.1
+    p_a[:, :3] += np.random.randn(len(p_b), 3) * 0.05
+    p_b[:, :3] += np.random.randn(len(p_b), 3) * 0.05
+    a_list = list(p_a[:, :3])
+    b_list = list(p_b[:, :3])
+    orb_detector.camera_coordinate_first = map(list, a_list)
+    orb_detector.camera_coordinate_second = map(list, b_list)
 
-    p_b = list(p_b[:, :3])
-    p_a = list(p_a[:, :3])
+    result = orb_detector.optimize_ransac(three_d=False)
 
-    cord_list = list(map(list, zip(p_a, p_b)))
+    # result_combined = np.vstack((pp, result))
 
-    t0 = time.clock()
-    res = least_squares(ORBDetector.ransac_residual_func, np.zeros(6), method='lm',
-                       kwargs={'cord_list': cord_list, 'is_lm': True, 'three_d': three_d})
-    print("elapsed time: {}".format(time.clock()-t0))
-    pp_calculated = res.x
+    p_a_reconstructed = p_b.dot(ORBDetector.getT(result, False).T)
 
-    t0 = time.clock()
-    T1 = getT(pp, True)
-    print("elapsed time: {}".format(time.clock() - t0))
+    # print(pp - result)
+    # print(p_a[:8] - p_a_reconstructed[:8])
 
-    t0 = time.clock()
-    T2 = ORBDetector.getT(pp, True)
-    print("elapsed time: {}".format(time.clock() - t0))
-
-    assert(np.allclose(T1, T2))
+    # assert(np.allclose(pp, result, 1e-1))
+    count = count + 1
+    print(result)
+    # if not np.allclose(p_a_reconstructed[:8], p_a[:8], 1e):
+    #     print("NO", count)
+    # else:
+    #     print("YES", count)
+    # t0 = time.clock()
+    # res = least_squares(ORBDetector.ransac_residual_func, np.zeros(6), method='lm',
+    #                     kwargs={'cords': cord_list, 'is_lm': True, 'three_d': three_d})
+    # print("elapsed time: {}".format(time.clock()-t0))
+    # pp_calculated = res.x
+    #
+    # t0 = time.clock()
+    # T1 = getT(pp, True)
+    # print("elapsed time: {}".format(time.clock() - t0))
+    #
+    # t0 = time.clock()
+    # T2 = ORBDetector.getT(pp, True)
+    # print("elapsed time: {}".format(time.clock() - t0))
+    #
+    # assert(np.allclose(T1, T2))
 
 """
 1. 至少lm的least squares是正确的。 
 2. 事实证明，矩阵相乘计算和直接利用公式计算的计算复杂度相差了100倍的效率。。。
 """
+
+
+if __name__ == "__main__":
+    count = 0
+    for i in range(20):
+        main()
