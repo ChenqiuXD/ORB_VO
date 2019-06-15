@@ -454,15 +454,15 @@ class ORBDetector:
         use lm (a sort of least squares) inside ransac each loop to solve the problem of outliers in matches.
         :return: The best position-posture variable: np.array([x, z, \theta])
         """
-        # pre-process:
         cords = np.hstack((self.camera_coordinate_first, self.camera_coordinate_second))
-        all_cord_indices = np.arange((len(cords)))
+        cords = cords[:, [0, 2, 1, 3, 5, 4]]  # revert the y, z to real camera axes
         """
         After convertion:
         cord_list: [<6-array>, 
                     <6-array>,
                     ...]
         """
+        all_cord_indices = np.arange((len(cords)))
         # hyper-parameters:
         min_points = 4  # 4 points is enough to derive a unique model.
         if min_points > len(cords):
@@ -478,31 +478,28 @@ class ORBDetector:
         x0 = np.zeros(3) if not three_d else np.zeros(6)
         while iteration < max_iteration:
             np.random.shuffle(all_cord_indices)
-            maybe_inliers_indices = all_cord_indices[:4]
-            other_indices = all_cord_indices[4:]
+            maybe_inliers_indices = all_cord_indices[:min_points]
+            other_indices = all_cord_indices[min_points:]
             maybe_inliers = cords[maybe_inliers_indices]
             other_cords = cords[other_indices]
             also_inliers = np.array([])
             # Calculate the pp with selected (maybe) inliers
             pp = least_squares(self.ransac_residual_func, x0, method='lm',
-                               kwargs={'cord_list': maybe_inliers, 'is_lm': True, 'three_d': three_d}).x
+                               kwargs={'cords': maybe_inliers, 'is_lm': True, 'three_d': three_d}).x
 
             # From other instances calculate the also inliers (maybe)
             for sample in other_cords:
-                err = self.ransac_residual_func(pp, sample.reshape(1, 3), is_lm=False, three_d=three_d)
+                err = self.ransac_residual_func(pp, sample.reshape(1, 6), is_lm=False, three_d=three_d)
                 if np.fabs(err) < threshold:
-                    if not also_inliers:
+                    if not len(also_inliers):
                         also_inliers = sample
                     else:
                         np.vstack((also_inliers, sample))
 
-            if len(also_inliers + maybe_inliers) > min_number_to_assert:
+            if len(also_inliers) + min_points > min_number_to_assert:
                 best_pp = pp
                 break
             else:
-                # candidate_pp = least_squares(self.ransac_residual_func, x0, method='lm',
-                #                              kwargs={'cord_list': maybe_inliers+also_inliers, 'is_lm': True,
-                #                                      'three_d': three_d}).x
                 this_err = self.ransac_residual_func(pp, cords=cords, is_lm=False, three_d=three_d)
                 if this_err < best_err:
                     best_pp = pp
@@ -511,6 +508,7 @@ class ORBDetector:
             iteration += 1
 
         self.displace_mat = ORBDetector.getT(best_pp, three_d=three_d)
+        self.optimized_result = best_pp
         return best_pp
 
     def optimize(self):
@@ -519,7 +517,7 @@ class ORBDetector:
             self.A = np.array(self.camera_coordinate_first, dtype=np.float32)
             self.B = np.array(self.camera_coordinate_second, dtype=np.float32)
             if USE_LM:
-                self.optimized_result = least_squares(self.func, x0=[0,0,0], method='lm').x
+                self.optimized_result = least_squares(self.func, x0=[0, 0, 0], method='lm').x
                 T = cal_matrix_T(self.optimized_result)
             self.displace_mat = T
 
@@ -547,7 +545,7 @@ class ORBDetector:
         self.displace_mat = T
 
     def get_new_pp(self):
-        ORBDetector.tm = np.dot(ORBDetector.tm,self.displace_mat)
+        ORBDetector.tm = np.dot(ORBDetector.tm, self.displace_mat)
         ORBDetector.pp = np.array([ORBDetector.tm[0, 3], ORBDetector.tm[1, 3], math.atan2(
             ORBDetector.tm[0, 1], ORBDetector.tm[1, 1])])
 

@@ -1,3 +1,4 @@
+# encoding: UTF-8
 import cv2
 import pyrealsense2 as rs
 import numpy as np
@@ -16,7 +17,7 @@ PLOT_TRAJECTORY = True
 MAX_ITER = 15000
 WAIT_KEY = 2
 PRINT_DELTA = False
-USE_RANSAC = False
+USE_RANSAC = True
 USE_RANSAC_2 = False
 
 
@@ -90,7 +91,7 @@ def main():
             # Optimize to calculate the transition matrix
             if len(orb_detector.camera_coordinate_first) >= 3:
                 if USE_RANSAC:
-                    orb_detector.optimize_ransac(three_d=True)
+                    orb_detector.optimize_ransac(three_d=False)
                 elif USE_RANSAC_2:
                     orb_detector.optimize_ransac2()
                 else:
