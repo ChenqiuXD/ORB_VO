@@ -25,6 +25,7 @@ TILE_H = int(WIN_H/3)
 TILE_W = int(WIN_W/4)
 
 RANSAC_MIN_ERROR = 1
+MAX_FEATURE = 250
 
 
 def optimize_after():
@@ -93,7 +94,8 @@ class ORBDetector:
     pp = np.array([0.0, 0.0, 0.0])  # The initial position and posture of the
     tm = np.eye(4)
 
-    def __init__(self, depth_intrin, use_lm=USE_LM, inlier_thre=INLIER_DIST_THRE, max_dis=MAX_DIS, min_dis=MIN_DIS):
+    def __init__(self, depth_intrin, use_lm=USE_LM, inlier_thre=INLIER_DIST_THRE, max_dis=MAX_DIS,
+                 min_dis=MIN_DIS, use_patch=True, use_blur=False):
         # Every frame has four attribute : color_frame, depth_frame, features, feature_descriptorss.
         self.first_color_frame = []
         self.second_color_frame = []
@@ -103,13 +105,16 @@ class ORBDetector:
         self.featureFrame_second = []
         self.featureDes_first = []
         self.featureDes_second = []
-        self.feature_index = []     # This variable stores the number of features in specific img_patch
+        self.feature_index_1 = []     # This variable stores the number of features in specific img_patch
+        self.feature_index_2 = []
 
         self.depth_intrin = depth_intrin
         self.orb = cv2.ORB_create(nfeatures=FEATUREMAX, fastThreshold=THRESHHOLD,
                                   nlevels=8, scaleFactor=1.2)
         self.USE_LM = use_lm
+        self.USE_PATCH = use_patch
         self.INLIER_DIST_THRE = inlier_thre
+        self.USE_BLUR = use_blur
         self.min_dis = min_dis
         self.max_dis = max_dis
         self.score = []
@@ -119,9 +124,7 @@ class ORBDetector:
         self.best_matches = []
 
         # The following part stores the coordinate of the features
-        # self.world_coordinate_first = []
         self.camera_coordinate_first = []
-        # self.world_coordinate_second = []
         self.camera_coordinate_second = []
         self.camera_pixel_second = []
         self.camera_pixel_first = []
@@ -140,7 +143,8 @@ class ORBDetector:
 
     def set_second_frame(self, color_frame, depth_frame):
         self.second_color_frame = np.asanyarray(color_frame.get_data())
-        self.second_color_frame = cv2.blur(self.second_color_frame, (3,3))
+        if self.USE_BLUR:
+            self.second_color_frame = cv2.blur(self.second_color_frame, (3,3))
         self.second_depth_frame = depth_frame
 
     def reset_frame(self, color_frame_next, depth_frame_next):
@@ -150,9 +154,11 @@ class ORBDetector:
         self.featureFrame_first = self.featureFrame_second
         self.first_color_frame = self.second_color_frame
         self.first_depth_frame = self.second_depth_frame
+        self.feature_index_1 = self.feature_index_2
 
         self.second_color_frame = np.asanyarray(color_frame_next.get_data())
-        self.second_color_frame = cv2.blur(self.second_color_frame, (3,3))
+        if self.USE_BLUR:
+            self.second_color_frame = cv2.blur(self.second_color_frame, (3,3))
         self.second_depth_frame = depth_frame_next
         # self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
         self.detect_second_features()
@@ -166,57 +172,64 @@ class ORBDetector:
         """Detect features and calculate the descriptors"""
         # P.S. the features and descriptors of frame A are calculated beforehand
         # self.featureFrame_first, self.featureDes_first = self.orb.detectAndCompute(self.first_color_frame, None)
-        # self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
-        kp = []
-        index = 0
-        self.featureFrame_second = []
-        self.featureDes_second = []
-        for y in range(0, WIN_H, TILE_H):
-            for x in range(0, WIN_W, TILE_W):
-                img_patch = self.second_color_frame[y:y+TILE_H, x:x+TILE_W]
-                keypoints = self.orb.detect(img_patch)
-
-                if len(keypoints) > 15:
-                    keypoints = sorted(keypoints, key=lambda x: -x.response)
-                    kpts = keypoints[0:15]
-                else:
-                    kpts = keypoints
-
-                kpts, des = self.orb.compute(img_patch, kpts)
-                for pt in kpts:
-                    pt.pt = (pt.pt[0] + x, pt.pt[1] + y)
-                if des is not None:
-                    for i in range(len(des)):
-                        self.featureDes_second.append(des[i])
-                        self.featureFrame_second.append(kpts[i])
-                    index += len(des)
-                    self.feature_index.append(index)
-        # self.featureFrame_second, self.featureDes_second = self.orb.compute(self.second_color_frame, kp)
-        self.featureDes_second = np.array(self.featureDes_second)
+        if not self.USE_PATCH:
+            self.featureFrame_second, self.featureDes_second = self.orb.detectAndCompute(self.second_color_frame, None)
+        else:
+            self.feature_index_2 = []
+            self.featureFrame_second = []
+            self.featureDes_second = []
+            for y in range(0, WIN_H, TILE_H):
+                for x in range(0, WIN_W, TILE_W):
+                    img_patch = self.second_color_frame[y:y+TILE_H, x:x+TILE_W]
+                    kpts = self.orb.detect(img_patch)
+                    kpts, des = self.orb.compute(img_patch, kpts)
+                    for pt in kpts:
+                        pt.pt = (pt.pt[0] + x, pt.pt[1] + y)
+                    if des is not None:
+                        for i in range(len(des)):
+                            self.featureDes_second.append(des[i])
+                            self.featureFrame_second.append(kpts[i])
+                        num = len(des)
+                        self.feature_index_2.append(num)
+                    else:
+                        self.feature_index_2.append(0)
+            self.featureDes_second = np.array(self.featureDes_second)
 
     def match_features(self):
         """This method match the features using BrutalForce and sort them by similarity
          and only take the strongest 50"""
         if self.featureDes_first is not None and self.featureDes_second is not None:
-            # IMPORTANT : match(queryDescriptors, trainDescriptors)
-            # matches = []
-            # for i in range(len(self.feature_index)):
-            #     if i == 0:
-            #         match = self.bfMatcher.match(np.array(self.featureDes_first[:self.feature_index[i]]),
-            #                                      np.array(self.featureDes_second[:self.feature_index[i]]))
-            #     else:
-            #         match = self.bfMatcher.match(np.array(self.featureDes_first[self.feature_index[i-1]:self.feature_index[i]]),
-            #                                      np.array(self.featureDes_second[self.feature_index[i-1]:self.feature_index[i]]))
-            #     for match_ in match:
-            #         if i == 0:
-            #             matches.append(match_)
-            #         else:
-            #             match_.queryIdx += self.feature_index[i-1]
-            #             match_.trainIdx += self.feature_index[i-1]
-            #             matches.append(match_)
-            matches = self.bfMatcher.match(self.featureDes_first, self.featureDes_second)
-            self.match = sorted(matches, key=lambda x: x.distance)
-            # self.match = self.match[:100]
+            if self.USE_PATCH:
+                # IMPORTANT : match(queryDescriptors, trainDescriptors)
+                matches = []
+                index_1 = 0
+                index_2 = 0
+                for i in range(len(self.feature_index_2)):
+                    if self.feature_index_1[i] == 0 or self.feature_index_2[i] == 0:
+                        index_1 += self.feature_index_1[i]
+                        index_2 += self.feature_index_2[i]
+                        continue
+                    if i == 0:
+                        match = self.bfMatcher.match(np.array(self.featureDes_first[:self.feature_index_1[i]]),
+                                                     np.array(self.featureDes_second[:self.feature_index_2[i]]))
+                    else:
+                        match = self.bfMatcher.match(np.array(self.featureDes_first[
+                                                              index_1:index_1 + self.feature_index_1[i]]),
+                                                     np.array(self.featureDes_second[
+                                                              index_2:index_2 + self.feature_index_2[i]]))
+                    for match_ in match:
+                        if i == 0:
+                            matches.append(match_)
+                        else:
+                            match_.queryIdx += index_1
+                            match_.trainIdx += index_2
+                            matches.append(match_)
+                    index_1 += self.feature_index_1[i]
+                    index_2 += self.feature_index_2[i]
+                self.match = matches
+            else:
+                matches = self.bfMatcher.match(self.featureDes_first, self.featureDes_second)
+                self.match = sorted(matches, key=lambda x: x.distance)
         else:
             self.match = []
 
@@ -296,41 +309,6 @@ class ORBDetector:
         self.camera_pixel_second = new_camera_pixel_second
         self.match = new_matches
 
-    def simple_match_filter(self,threshhold):
-        assert len(self.camera_coordinate_second) == len(self.camera_coordinate_first)==len(self.match)
-        original_match_len = len(self.camera_coordinate_first)
-        after_filter_first = []
-        after_filter_second = []
-        max_deletax = 0
-        max_deletay = 0
-        max_deletaz = 0
-        new_matches = []
-        for i in range(original_match_len):
-
-            delta_x = abs(self.camera_coordinate_first[i][0] - self.camera_coordinate_second[i][0])
-            delta_y = abs(self.camera_coordinate_first[i][1] - self.camera_coordinate_second[i][1])
-            delta_z = abs(self.camera_coordinate_first[i][2] - self.camera_coordinate_second[i][2])
-            if delta_x<threshhold and delta_y<threshhold and delta_z < threshhold:
-                if delta_x > max_deletax :
-                    max_deletax = delta_x
-                if delta_y > max_deletay :
-                    max_deletay = delta_y
-                if delta_z > max_deletaz :
-                    max_deletaz = delta_z
-
-                after_filter_first.append(self.camera_coordinate_first[i])
-                after_filter_second.append(self.camera_coordinate_second[i])
-                self.best_matches.append(self.match[i])
-                new_matches.append(self.match[i])
-        self.camera_coordinate_first = after_filter_first.copy()
-        self.camera_coordinate_second = after_filter_second.copy()
-        self.match = new_matches
-        print('过滤后的关键点数量:'+str(len(self.camera_coordinate_first)))
-        print('过滤后的delta最大值'+str([max_deletax,max_deletay,max_deletaz]))
-        if len(self.camera_coordinate_first):
-            print('过滤后的最远点:'+str(np.sort(np.asanyarray(self.camera_coordinate_first),axis=0)[-1][1]))
-            print('过滤后的最近点:'+str(np.sort(np.asanyarray(self.camera_coordinate_first),axis=0)[0][1]))
-
     def calculate_camera_coordinates(self, depth_to_color_extrin):
         """This method get the list A and B by rs.deproject function"""
         self.camera_coordinate_first = []
@@ -369,11 +347,19 @@ class ORBDetector:
             # threeD_file.write("\n")
             # point_b = [point_b[0], point_b[2], 1]
             match.append(pair)
-            self.camera_coordinate_first.append([point_a[0],point_a[2],point_a[1]])
+            self.camera_coordinate_first.append([point_a[0], point_a[2], point_a[1]])
             self.camera_pixel_second.append(point_b_pixel)
             self.camera_pixel_first.append(point_a_pixel)
-            self.camera_coordinate_second.append([point_b[0],point_b[2],point_b[1]])
-        self.match = match
+            self.camera_coordinate_second.append([point_b[0], point_b[2], point_b[1]])
+        self.match = match.copy()
+
+        # Take the first 300 features to accelerate the algorithm
+        if len(self.camera_coordinate_first) >= MAX_FEATURE:
+            self.camera_coordinate_first = self.camera_coordinate_first[:MAX_FEATURE]
+            self.camera_coordinate_second = self.camera_coordinate_second[:MAX_FEATURE]
+            self.camera_pixel_first = self.camera_pixel_first[:MAX_FEATURE]
+            self.camera_pixel_second = self.camera_pixel_second[:MAX_FEATURE]
+            self.match = self.match[:MAX_FEATURE]
 
     def func(self, result):
         num_points = self.A.shape[0]
@@ -504,7 +490,7 @@ class ORBDetector:
             other_indices = all_cord_indices[min_points:]
             maybe_inliers = cords[maybe_inliers_indices]
             other_cords = cords[other_indices]
-            # also_inliers = np.array([])
+
             num_also_inliers = 0
             # Calculate the pp with selected (maybe) inliers
             pp = least_squares(self.ransac_residual_func, x0, method='lm',
@@ -547,29 +533,6 @@ class ORBDetector:
                 self.optimized_result = least_squares(self.func, x0=[0, 0, 0], method='lm').x
                 T = cal_matrix_T(self.optimized_result)
             self.displace_mat = T
-
-    def optimize_ransac2(self):
-        ransac_error = float('inf')
-        d_out = None
-        ransac_size = 6
-        for ransac_itr in range(100):
-            sampled_points = np.random.randint(0, len(self.camera_coordinate_first), ransac_size)
-            self.A = []
-            self.B = []
-            for i in sampled_points:
-                self.A.append(self.camera_coordinate_first[i])
-                self.B.append(self.camera_coordinate_second[i])
-            self.A = np.array(self.A, dtype=np.float32)
-            self.B = np.array(self.B, dtype=np.float32)
-            result = least_squares(self.func, x0=[0, 0, 0], method='lm')
-            error = result.cost
-            if error < ransac_error:
-                ransac_error = error
-                d_out = result.x
-            if ransac_error < RANSAC_MIN_ERROR:
-                break
-        T = cal_matrix_T(d_out)
-        self.displace_mat = T
 
     def get_new_pp(self):
         ORBDetector.tm = np.dot(ORBDetector.tm, self.displace_mat)

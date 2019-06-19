@@ -7,7 +7,7 @@ fig = plt.figure()
 # plt.xlim([-3, 0.5])
 # plt.ylim([-0.5, 3])
 if PLOT_TRAJECTORY:
-    plt.plot(arr[:, 0], arr[:, 1])
+    plt.plot(arr[:, 1], arr[:, 2])
 else:
     plt.scatter(arr[:, 0], arr[:, 1])
 plt.show()

@@ -2,23 +2,24 @@
 import cv2
 import pyrealsense2 as rs
 import numpy as np
-from orb import ORBDetector, optimize_after
+from orb import ORBDetector
 from draw_animation import draw_trace
 
 USE_LM = True
-BAG_NAME = 'o.bag'
-MAX_DIS = 5
+BAG_NAME = '20190619_102209.bag'
+MAX_DIS = 8
 MIN_DIS = 0.1
 INLIER_THRE = 0.5
 GAP = 3
 threshhold_coord = 0.1
 threshhold_theta = np.pi/36
 PLOT_TRAJECTORY = True
-MAX_ITER = 15000
+MAX_ITER = 8040
 WAIT_KEY = 2
 PRINT_DELTA = False
 USE_RANSAC = True
-USE_RANSAC_2 = False
+USE_PATCH = False
+USE_BLUR = False
 
 
 def main():
@@ -64,7 +65,8 @@ def main():
 
         if iterCount == 0:
             orb_detector = ORBDetector(depth_intrin=depth_intrin, use_lm=USE_LM, min_dis=MIN_DIS,
-                                       max_dis=MAX_DIS, inlier_thre=INLIER_THRE)
+                                       max_dis=MAX_DIS, inlier_thre=INLIER_THRE,
+                                       use_patch=USE_PATCH, use_blur=USE_BLUR)
             orb_detector.set_second_frame(color_frame=color_frame,
                                           depth_frame=second_depth_frame)
             orb_detector.detect_second_features()
@@ -80,7 +82,6 @@ def main():
             orb_detector.match_features()
             orb_detector.calculate_camera_coordinates(depth_to_color_extrin=depth_to_color_extrin)
             if len(orb_detector.match) != 0:
-                # orb_detector.simple_match_filter(threshhold=GAP*0.05)
                 orb_detector.find_inlier_3d()
             else:
                 print("初始关键点不足")
@@ -92,8 +93,6 @@ def main():
             if len(orb_detector.camera_coordinate_first) >= 3:
                 if USE_RANSAC:
                     orb_detector.optimize_ransac(three_d=False)
-                elif USE_RANSAC_2:
-                    orb_detector.optimize_ransac2()
                 else:
                     orb_detector.optimize()
 
